@@ -1,0 +1,22 @@
+[project]
+name = "product-categorizer"
+version = "0.0.1"
+requires-python = ">=3.11"
+
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "sqlalchemy",
+  "pydantic",
+  "pydantic-settings",
+  "faiss-cpu",
+]
+
+[project.optional-dependencies]
+embeddings = [
+  "sentence-transformers",
+  "torch"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
