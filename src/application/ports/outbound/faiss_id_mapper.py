@@ -13,32 +13,11 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 
 
-class VectorIndex(ABC):
+class FaissIdMapper(ABC):
+    @abstractmethod
+    def get_or_create_faiss_id(self, entity_uuid: UUID) -> int:
+        pass
 
     @abstractmethod
-    def reset(
-        self,
-        dim: int
-    ) -> None:
-        """Resets the vector index."""
-        raise NotImplementedError
-
-
-    @abstractmethod
-    def upsert(
-        self,
-        item_id: UUID,
-        vector: list[float]
-    ) -> None:
-        """Upserts a vector into the index."""
-        raise NotImplementedError
-
-
-    @abstractmethod
-    def search(
-        self,
-        query_vector: list[float],
-        top_k: int
-    ) -> list[tuple[UUID, float]]:
-        """Searches for the most similar vectors in the index."""
-        raise NotImplementedError
+    def get_uuid(self, faiss_id: int) -> UUID | None:
+        pass

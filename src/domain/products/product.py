@@ -23,12 +23,16 @@ class Product:
     description: str
     keywords: list[str]
 
+    gender: str | None
+    business_type: str | None
 
     @staticmethod
     def create(
         title: str,
         description: str,
-        keywords: list[str]
+        keywords: list[str],
+        gender: str | None,
+        business_type: str | None
     ) -> Product:
         title = title.strip()
 
@@ -42,8 +46,10 @@ class Product:
             id=uuid4(),
             title=title,
             description=description,
-            keywords=keywords
-    )
+            keywords=keywords,
+            gender=gender,
+            business_type=business_type
+        )
 
 
     def to_embedding_text(self) -> str:

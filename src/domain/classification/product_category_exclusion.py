@@ -1,7 +1,10 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
-from abc import ABC, abstractmethod
+from __future__ import annotations
+
+from dataclasses import dataclass
+from uuid import UUID
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -12,18 +15,8 @@ from abc import ABC, abstractmethod
 # ---------------------------------------------------------------------
 
 
-class EmbeddingService(ABC):
-
-    @abstractmethod
-    def embed_text(
-        self,
-        text: str
-    ) -> list[float]:
-        """Embeds a text into a vector space."""
-        raise NotImplementedError
-
-
-    @abstractmethod
-    def dimension(self) -> int:
-        """Returns the dimensionality of the embedding space."""
-        raise NotImplementedError
+@dataclass(frozen=True)
+class ProductCategoryExclusion:
+    product_id: UUID
+    category_id: UUID
+    reason: str

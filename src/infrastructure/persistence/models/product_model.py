@@ -19,6 +19,6 @@ class ProductModel(Base):
     __tablename__ = "products"
 
     id: Mapped[bytes] = mapped_column(BLOB, primary_key=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     keywords_json: Mapped[dict] = mapped_column(Text, nullable=False)

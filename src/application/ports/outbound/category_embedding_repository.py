@@ -18,7 +18,7 @@ class CategoryEmbeddingRepository(ABC):
     @abstractmethod
     def upsert(
         self,
-        category: UUID,
+        category_id: UUID,
         vector: list[float]
     ) -> None:
         """Upserts a category vector into the repository."""

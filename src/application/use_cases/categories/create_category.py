@@ -35,9 +35,9 @@ class CreateCategoryUseCase:
             if parent is None:
                 raise ValueError(f"Parent category with id {cmd.parent_id} does not exist.")
 
-        category = Category(
+        category = Category.create(
             name=cmd.name,
-            parent=parent
+            parent_id=cmd.parent_id,
         )
 
         self.categories.save(category)

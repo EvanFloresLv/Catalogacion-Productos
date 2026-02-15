@@ -13,32 +13,8 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 
 
-class VectorIndex(ABC):
+class ProductCategoryExceptionRepository(ABC):
 
     @abstractmethod
-    def reset(
-        self,
-        dim: int
-    ) -> None:
-        """Resets the vector index."""
-        raise NotImplementedError
-
-
-    @abstractmethod
-    def upsert(
-        self,
-        item_id: UUID,
-        vector: list[float]
-    ) -> None:
-        """Upserts a vector into the index."""
-        raise NotImplementedError
-
-
-    @abstractmethod
-    def search(
-        self,
-        query_vector: list[float],
-        top_k: int
-    ) -> list[tuple[UUID, float]]:
-        """Searches for the most similar vectors in the index."""
+    def get_excluded_category_ids(self, product_id: UUID) -> set[UUID]:
         raise NotImplementedError

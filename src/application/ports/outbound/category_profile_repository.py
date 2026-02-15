@@ -11,34 +11,22 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
+from domain.classification.category_profile import CategoryProfile
 
 
-class VectorIndex(ABC):
+class CategoryProfileRepository(ABC):
 
     @abstractmethod
-    def reset(
-        self,
-        dim: int
-    ) -> None:
-        """Resets the vector index."""
+    def list_all_profiles(self) -> list[CategoryProfile]:
         raise NotImplementedError
 
 
     @abstractmethod
-    def upsert(
+    def upsert_profile(
         self,
-        item_id: UUID,
-        vector: list[float]
+        category_id: UUID,
+        keywords: list[str],
+        allowed_genders: set[str] | None,
+        allowed_business_types: set[str] | None,
     ) -> None:
-        """Upserts a vector into the index."""
-        raise NotImplementedError
-
-
-    @abstractmethod
-    def search(
-        self,
-        query_vector: list[float],
-        top_k: int
-    ) -> list[tuple[UUID, float]]:
-        """Searches for the most similar vectors in the index."""
         raise NotImplementedError

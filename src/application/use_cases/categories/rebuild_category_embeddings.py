@@ -1,6 +1,7 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
+from __future__ import annotations
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -9,48 +10,37 @@
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.outbound.category_repository import CategoryRepository
-from application.ports.outbound.category_embedding_repository import CategoryEmbeddingRepository
+from application.ports.outbound.category_profile_repository import CategoryProfileRepository
 from application.ports.outbound.embedding_service import EmbeddingService
 from application.ports.outbound.vector_index import VectorIndex
 
 
-class RebuildCategoryEmbeddingsUseCase:
-
+class RebuildCategoryIndexUseCase:
     def __init__(
         self,
-        categories: CategoryRepository,
-        embedding_repo: CategoryEmbeddingRepository,
-        embedding_service: EmbeddingService,
-        vector_index: VectorIndex
+        profiles: CategoryProfileRepository,
+        embeddings: EmbeddingService,
+        index: VectorIndex,
     ):
-        self.categories = categories
-        self.embedding_repo = embedding_repo
-        self.embedding_service = embedding_service
-        self.vector_index = vector_index
+        self.profiles = profiles
+        self.embeddings = embeddings
+        self.index = index
 
 
-    def execute(self) -> int:
+    def execute(self) -> dict:
+        profiles = self.profiles.list_all_profiles()
 
-        cats = self.categories.get_all()
+        self.index.reset(self.embeddings.dimension())
 
-        if not cats:
-            return 0
+        for prof in profiles:
+            text = prof.category.name
+            if prof.keywords:
+                text += "\nkeywords: " + ", ".join(prof.keywords)
 
+            vec = self.embeddings.embed_text(text)
+            self.index.upsert(prof.category.id, vec)
 
-        vectors: list[tuple] = []
+        if hasattr(self.index, "save"):
+            self.index.save()
 
-        for cat in cats:
-            text = f"CATEGORY: {cat.name}"
-            vector = self.embedding_service.embed_text(text)
-            vectors.append((cat.id, vector))
-
-        dim = len(vectors[0][1])
-        self.vector_index.reset(dim)
-
-        for cat_id, vector in vectors:
-            self.embedding_repo.upsert(cat_id, vector)
-            self.vector_index.upsert(cat_id, vector)
-
-
-        return len(vectors)
+        return {"indexed_categories": len(profiles)}
