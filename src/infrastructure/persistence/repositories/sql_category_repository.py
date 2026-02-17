@@ -6,7 +6,7 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 # ---------------------------------------------------------------------
@@ -14,52 +14,74 @@ from sqlalchemy.orm import Session
 # ---------------------------------------------------------------------
 from domain.categories.category import Category
 from application.ports.outbound.category_repository import CategoryRepository
-from infrastructure.persistence.models.category_model import CategoryModel
-from infrastructure.persistence.utils.uuid import uuid_to_bytes, bytes_to_uuid
 
 
 class SQLCategoryRepository(CategoryRepository):
 
-    def __init__(self, session: Session):
-        self.session = session
+    def __init__(self, db: Session):
+        self.db = db
 
 
     def save(self, category: Category) -> None:
-
-        model = CategoryModel(
-            id=uuid_to_bytes(category.id),
-            name=category.name,
-            parent_id=uuid_to_bytes(category.parent_id) if category.parent_id else None
+        self.db.execute(
+            text(
+                """
+                INSERT INTO categories (id, name, parent_id)
+                VALUES (:id, :name, :parent_id)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    parent_id = excluded.parent_id
+                """
+            ),
+            {
+                "id": str(category.id),
+                "name": category.name,
+                "parent_id": str(category.parent_id) if category.parent_id else None,
+            },
         )
-
-        self.session.merge(model)
-        self.session.commit()
+        self.db.commit()
 
 
     def get_all(self) -> list[Category]:
-
-        stmt = select(CategoryModel)
-        result = self.session.execute(stmt).scalars().all()
+        rows = (
+            self.db.execute(text("SELECT id, name, parent_id FROM categories"))
+            .mappings()
+            .all()
+        )
 
         return [
             Category(
-                id=bytes_to_uuid(item.id),
-                name=item.name,
-                parent_id=bytes_to_uuid(item.parent_id) if item.parent_id else None
+                id=UUID(r["id"]),
+                name=r["name"],
+                parent_id=UUID(r["parent_id"]) if r["parent_id"] else None,
             )
-            for item in result
+            for r in rows
         ]
 
 
-    def get_by_id(self, category_id) -> Category | None:
+    def get_by_id(self, category_id: UUID) -> Category | None:
+        row = (
+            self.db.execute(
+                text(
+                    """
+                    SELECT id, name, parent_id
+                    FROM categories
+                    WHERE id = :id
+                    """
+                ),
+                {"id": str(category_id)},
+            )
+            .mappings()
+            .first()
+        )
 
-        result = self.session.get(CategoryModel, uuid_to_bytes(category_id))
-
-        if result is None:
+        if row is None:
             return None
 
+        parent_id = row["parent_id"]
+
         return Category(
-            id=bytes_to_uuid(result.id),
-            name=result.name,
-            parent_id=bytes_to_uuid(result.parent_id) if result.parent_id else None
+            id=UUID(row["id"]),
+            name=row["name"],
+            parent_id=UUID(parent_id) if parent_id else None,
         )

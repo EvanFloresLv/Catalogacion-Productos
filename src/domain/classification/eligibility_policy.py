@@ -27,8 +27,8 @@ class CategoryEligibilityPolicy:
         c = category.constraints
 
         if (
-            c.allowed_gender is not None and
-            product.gender not in c.allowed_gender
+            c.allowed_genders is not None and
+            product.gender not in c.allowed_genders
         ):
             return False
 

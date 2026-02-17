@@ -1,19 +1,25 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
-import sqlite3
 
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
+from sqlalchemy import String, Integer, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
+from infrastructure.persistence.db import Base
 
 
-def create_connection(db_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+class FaissIdMapModel(Base):
+    __tablename__ = "faiss_id_map"
+
+    faiss_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    entity_uuid: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+    __table_args__ = (
+        UniqueConstraint("entity_uuid", name="uq_faiss_entity_uuid"),
+    )

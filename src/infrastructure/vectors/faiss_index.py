@@ -33,7 +33,7 @@ class FaissVectorIndex:
         self._index = faiss.IndexIDMap2(base)
 
 
-    def add(self, item_id: UUID, vector: list[float]) -> None:
+    def upsert(self, item_id: UUID, vector: list[float]) -> None:
         if self._index is None:
             raise RuntimeError("FAISS index not initialized. Call reset() first.")
 

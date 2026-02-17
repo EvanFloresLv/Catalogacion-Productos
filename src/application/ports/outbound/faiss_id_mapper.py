@@ -14,10 +14,12 @@ from uuid import UUID
 
 
 class FaissIdMapper(ABC):
+
     @abstractmethod
     def get_or_create_faiss_id(self, entity_uuid: UUID) -> int:
-        pass
+        raise NotImplementedError
+
 
     @abstractmethod
     def get_uuid(self, faiss_id: int) -> UUID | None:
-        pass
+        raise NotImplementedError

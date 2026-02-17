@@ -5,29 +5,28 @@
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import String, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
 from infrastructure.persistence.db import Base
+from infrastructure.persistence.models.category_model import CategoryModel
 
 
-class CategoryModel(Base):
-    __tablename__ = "categories"
+class CategoryProfileModel(Base):
+    __tablename__ = "category_profiles"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-
-    parent_id: Mapped[str | None] = mapped_column(
+    category_id: Mapped[str] = mapped_column(
         String,
         ForeignKey("categories.id"),
-        nullable=True,
+        primary_key=True,
     )
 
-    parent: Mapped["CategoryModel | None"] = relationship(
-        "CategoryModel",
-        remote_side=[id],
-        backref="children",
-    )
+    keywords_json: Mapped[str] = mapped_column(Text, nullable=False)
+
+    allowed_genders_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allowed_business_types_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    category: Mapped["CategoryModel"] = relationship("CategoryModel")

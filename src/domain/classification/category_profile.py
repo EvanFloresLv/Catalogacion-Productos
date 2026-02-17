@@ -20,3 +20,4 @@ from domain.classification.category_constraints import CategoryConstraints
 class CategoryProfile:
     category: Category
     constraints: CategoryConstraints
+    keywords: list[str]

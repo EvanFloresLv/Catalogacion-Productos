@@ -3,6 +3,8 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
@@ -13,6 +15,11 @@ from __future__ import annotations
 from application.ports.outbound.category_profile_repository import CategoryProfileRepository
 from application.ports.outbound.embedding_service import EmbeddingService
 from application.ports.outbound.vector_index import VectorIndex
+
+
+@dataclass(frozen=True)
+class RebuildCategoryIndexCommand:
+    pass
 
 
 class RebuildCategoryIndexUseCase:
@@ -27,7 +34,7 @@ class RebuildCategoryIndexUseCase:
         self.index = index
 
 
-    def execute(self) -> dict:
+    def execute(self, cmd: RebuildCategoryIndexCommand) -> dict:
         profiles = self.profiles.list_all_profiles()
 
         self.index.reset(self.embeddings.dimension())

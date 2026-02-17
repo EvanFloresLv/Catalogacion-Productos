@@ -5,29 +5,32 @@
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import String, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
 from infrastructure.persistence.db import Base
+from infrastructure.persistence.models import CategoryModel, ProductModel
 
 
-class CategoryModel(Base):
-    __tablename__ = "categories"
+class ProductCategoryExclusionModel(Base):
+    __tablename__ = "product_category_exclusions"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    product_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("products.id"),
+        primary_key=True,
+    )
 
-    parent_id: Mapped[str | None] = mapped_column(
+    category_id: Mapped[str] = mapped_column(
         String,
         ForeignKey("categories.id"),
-        nullable=True,
+        primary_key=True,
     )
 
-    parent: Mapped["CategoryModel | None"] = relationship(
-        "CategoryModel",
-        remote_side=[id],
-        backref="children",
-    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+    product: Mapped["ProductModel"] = relationship("ProductModel")
+    category: Mapped["CategoryModel"] = relationship("CategoryModel")

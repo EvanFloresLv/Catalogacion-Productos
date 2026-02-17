@@ -25,4 +25,4 @@ class CategoryMatch:
 class ClassificationResult:
     product_id: UUID
     best: CategoryMatch
-    matches: list[CategoryMatch]
+    top_k: list[CategoryMatch]

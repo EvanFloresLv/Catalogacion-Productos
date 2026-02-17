@@ -60,7 +60,7 @@ class ClassifyProductUseCase:
             business_type=product.business_type
         )
 
-        profiles = self.profiles.list_all_profiles(ctx)
+        profiles = self.profiles.list_all_profiles()
         excluded = self.exclusions.get_excluded_category_ids(product.id)
 
         allowed_ids = set()
@@ -79,7 +79,7 @@ class ClassifyProductUseCase:
         # Buscamos un top-N grande para que el filtrado no mate resultados
         raw = self.index.search(query, top_k=max(cmd.top_k * 10, 50))
 
-        filtered = [(cid, score) for cid, score in raw if cid in allowed_ids]
+        filtered = [(cid, abs(score)) for cid, score in raw if cid in allowed_ids]
         if not filtered:
             raise NoEligibleMatchesError("No eligible matches found")
 
