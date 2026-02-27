@@ -13,8 +13,8 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.outbound.category_repository import CategoryRepository
-from application.ports.outbound.category_profile_repository import CategoryProfileRepository
+from application.ports.category_repository import CategoryRepository
+from application.ports.category_profile_repository import CategoryProfileRepository
 
 
 @dataclass(frozen=True)

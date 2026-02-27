@@ -11,8 +11,8 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.outbound.category_repository import CategoryRepository
-from domain.categories.category import Category
+from application.ports.category_repository import CategoryRepository
+from domain.entities.categories.category import Category
 
 
 @dataclass

@@ -13,9 +13,9 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.outbound.product_repository import ProductRepository
-from application.ports.outbound.category_repository import CategoryRepository
-from application.ports.outbound.exclusion_repository import ExclusionRepository
+from application.ports.product_repository import ProductRepository
+from application.ports.category_repository import CategoryRepository
+from application.ports.exclusion_repository import ExclusionRepository
 
 
 @dataclass(frozen=True)

@@ -11,16 +11,17 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.outbound.product_repository import ProductRepository
-from application.ports.outbound.category_profile_repository import CategoryProfileRepository
-from application.ports.outbound.exclusion_repository import ExclusionRepository
-from application.ports.outbound.embedding_service import EmbeddingService
-from application.ports.outbound.vector_index import VectorIndex
+from application.ports.product_repository import ProductRepository
+from application.ports.category_profile_repository import CategoryProfileRepository
+from application.ports.exclusion_repository import ExclusionRepository
+from application.ports.embedding_repository import EmbeddingRepository
 
-from domain.classification.eligibility_policy import CategoryEligibilityPolicy
-from domain.classification.product_context import ProductContext
-from domain.classification.result import ClassificationResult, CategoryMatch
-from domain.classification.errors import NoEligibleCategoriesError, NoEligibleMatchesError
+from domain.specifications.eligibility_policy import CategoryEligibilityPolicy
+from domain.entities.products.product_context import ProductContext
+from domain.entities.classification.result import ClassificationResult, CategoryMatch
+from domain.entities.classification.errors import NoEligibleCategoriesError, NoEligibleMatchesError
+
+from domain.value_objects.semantic_hash import SemanticHash
 
 
 @dataclass(frozen=True)
@@ -36,24 +37,22 @@ class ClassifyProductUseCase:
         products: ProductRepository,
         profiles: CategoryProfileRepository,
         exclusions: ExclusionRepository,
-        embeddings: EmbeddingService,
-        index: VectorIndex,
+        embeddings: EmbeddingRepository,
         policy: CategoryEligibilityPolicy,
     ):
         self.products = products
         self.profiles = profiles
         self.exclusions = exclusions
         self.embeddings = embeddings
-        self.index = index
         self.policy = policy
 
 
     def execute(self, cmd: ClassifyProductCommand) -> ClassificationResult:
 
         product = self.products.get_by_id(cmd.product_id)
+
         if not product:
             raise ValueError(f"Product with ID {cmd.product_id} not found.")
-
 
         ctx = ProductContext(
             gender=product.gender,
@@ -74,10 +73,10 @@ class ClassifyProductUseCase:
         if not allowed_ids:
             raise NoEligibleCategoriesError("No eligible categories for this product")
 
-        query = self.embeddings.embed_text(product.to_embedding_text())
+        query = SemanticHash.from_text(product.to_embedding_text()).value
 
         # Buscamos un top-N grande para que el filtrado no mate resultados
-        raw = self.index.search(query, top_k=max(cmd.top_k * 10, 50))
+        raw = self.embeddings
 
         filtered = [(cid, abs(score)) for cid, score in raw if cid in allowed_ids]
         if not filtered:

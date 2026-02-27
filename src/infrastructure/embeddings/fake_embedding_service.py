@@ -11,7 +11,7 @@ import numpy as np
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.outbound.embedding_service import EmbeddingService
+from application.ports.embedding_service import EmbeddingService
 
 
 class FakeEmbeddingService(EmbeddingService):

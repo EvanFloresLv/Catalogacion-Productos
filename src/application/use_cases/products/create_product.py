@@ -11,8 +11,8 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.outbound.product_repository import ProductRepository
-from domain.products.product import Product
+from application.ports.product_repository import ProductRepository
+from domain.entities.products.product import Product
 
 
 @dataclass(frozen=True)
