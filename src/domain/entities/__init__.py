@@ -7,6 +7,7 @@ from .classification.result import ClassificationResult, CategoryMatch
 from .classification.errors import ClassificationError, NoEligibleMatchesError, NoEligibleCategoriesError
 
 from .products.product import Product
+from .products.product_context import ProductContext
 from .products.product_category_exclusion import ProductCategoryExclusion
 from .products.errors import ProductError, ProductTitleError
 
@@ -27,6 +28,7 @@ __all__ = [
     "Product",
     "ProductCategoryExclusion",
     "ProductError",
+    "ProductContext",
     "ProductTitleError",
     "Embedding"
 ]

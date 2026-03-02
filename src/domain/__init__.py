@@ -15,40 +15,32 @@ from .entities.products.errors import ProductError, ProductTitleError
 
 from .entities.embeddings.embedding import Embedding
 
-# Services
-from .services.duplicate_detection_service import DuplicateDetectionService
-from .services.category_semantic_search_service import CategorySemanticSearchService
-
 # Specifications
 from .specifications.eligibility_policy import CategoryEligibilityPolicy
-from .specifications.semantic_uniqueness_spec import SemanticUniquenessSpecification
 
 # Value objects
 from .value_objects.semantic_hash import SemanticHash
 
 __all__ = [
-    "Category",
-    "CategoryProfile",
-    "CategoryConstraints",
-    "CategoryException",
-    "CategoryError",
-    "CategoryNameError",
-    "CategoryDuplicateSemanticContentError",
-    "ClassificationResult",
-    "CategoryMatch",
-    "CategorySemanticSearchService",
-    "ClassificationError",
-    "NoEligibleMatchesError",
-    "NoEligibleCategoriesError",
-    "Product",
-    "ProductCategoryExclusion",
-    "ProductError",
-    "ProductTitleError",
-    "Embedding",
-    "DuplicateDetectionService",
-    "CategoryEligibilityPolicy",
-    "SemanticUniquenessSpecification",
-    "SemanticHash",
-    "ProductContext",
-    "ProductCategoryExclusion"
+   "Category",
+   "CategoryProfile",
+   "CategoryConstraints",
+   "CategoryException",
+   "CategoryError",
+   "CategoryNameError",
+   "CategoryDuplicateSemanticContentError",
+   "ClassificationResult",
+   "CategoryMatch",
+   "ClassificationError",
+   "NoEligibleMatchesError",
+   "NoEligibleCategoriesError",
+   "Product",
+   "ProductCategoryExclusion",
+   "ProductError",
+   "ProductTitleError",
+   "Embedding",
+   "CategoryEligibilityPolicy",
+   "SemanticHash",
+   "ProductContext",
+   "ProductCategoryExclusion"
 ]

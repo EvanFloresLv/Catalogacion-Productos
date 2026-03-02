@@ -2,7 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 from abc import ABC, abstractmethod
-from uuid import UUID
+from typing import Iterable
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -11,6 +11,7 @@ from uuid import UUID
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
+from domain.entities.categories.category_constraints import CategoryConstraints
 from domain.entities.categories.category_profile import CategoryProfile
 
 
@@ -22,11 +23,21 @@ class CategoryProfileRepository(ABC):
 
 
     @abstractmethod
-    def upsert_profile(
+    def get_profiles_by_constraints(self, constraints: CategoryConstraints) -> list[CategoryProfile]:
+        raise NotImplementedError
+
+
+    @abstractmethod
+    def save(
         self,
-        category_id: UUID,
-        keywords: list[str],
-        allowed_genders: set[str] | None,
-        allowed_business_types: set[str] | None,
+        profile: CategoryProfile
+    ) -> None:
+        raise NotImplementedError
+
+
+    @abstractmethod
+    def save_batch(
+        self,
+        profiles: Iterable[CategoryProfile]
     ) -> None:
         raise NotImplementedError

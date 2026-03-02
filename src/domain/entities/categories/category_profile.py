@@ -20,3 +20,11 @@ from domain.entities.categories.category_constraints import CategoryConstraints
 class CategoryProfile:
     category: Category
     constraints: CategoryConstraints
+
+
+    @staticmethod
+    def create(category: Category, constraints: CategoryConstraints) -> CategoryProfile:
+        return CategoryProfile(
+            category=category,
+            constraints=constraints
+        )

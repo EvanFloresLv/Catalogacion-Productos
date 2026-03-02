@@ -2,13 +2,14 @@
 # Standard library
 # ---------------------------------------------------------------------
 from uuid import UUID
+from typing import Iterable
 
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 # ---------------------------------------------------------------------
 # Internal application imports
@@ -17,12 +18,12 @@ from domain.entities.categories.category import Category
 from domain.value_objects.semantic_hash import SemanticHash
 from domain.entities.categories.category_profile import CategoryProfile
 from domain.entities.categories.category_constraints import CategoryConstraints
+
 from application.ports.category_profile_repository import CategoryProfileRepository
 
 from infrastructure.persistence.postgresql.models.category_profile_model import CategoryProfileModel
-from infrastructure.persistence.postgresql.models.category_model import CategoryModel
 
-from utils.json import json_to_set, set_to_json
+from utils.json import json_to_set
 
 
 class CategoryProfileRepositoryPG(CategoryProfileRepository):
@@ -30,80 +31,169 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
     def __init__(self, session: Session):
         self.session = session
 
-    # ---------------------------------
-    # Upsert
-    # ---------------------------------
-    def upsert_profile(
-        self,
-        category_id: UUID,
-        keywords: list[str],
-        allowed_genders: set[str] | None,
-        allowed_business_types: set[str] | None,
-    ) -> None:
+    # --------------------------------------------------
+    # List all
+    # --------------------------------------------------
+    def list_all_profiles(self) -> list[CategoryProfile]:
+
+        stmt = (
+            select(CategoryProfileModel)
+            .options(
+                # Avoid N+1 category loading
+                selectinload(CategoryProfileModel.category)
+            )
+        )
+
+        rows = self.session.execute(stmt).scalars().all()
+
+        return [self._to_entity(r) for r in rows]
+
+    # --------------------------------------------------
+    # Save Single
+    # --------------------------------------------------
+    def save(self, profile: CategoryProfile) -> CategoryProfile:
 
         stmt = insert(CategoryProfileModel).values(
-            category_id=category_id,
-            keywords_json=set_to_json(keywords),
-            allowed_genders_json=set_to_json(allowed_genders),
-            allowed_business_types_json=set_to_json(allowed_business_types),
+            category_id=profile.category.id,
+            allowed_genders=list(profile.constraints.allowed_genders),
+            allowed_business_types=list(profile.constraints.allowed_business_types),
         )
 
         stmt = stmt.on_conflict_do_update(
             index_elements=["category_id"],
             set_={
-                "keywords_json": stmt.excluded.keywords_json,
-                "allowed_genders_json": stmt.excluded.allowed_genders_json,
-                "allowed_business_types_json": stmt.excluded.allowed_business_types_json,
+                "allowed_genders": stmt.excluded.allowed_genders,
+                "allowed_business_types": stmt.excluded.allowed_business_types,
             },
-        )
+        ).returning(CategoryProfileModel)
 
-        self.session.execute(stmt)
+        result = self.session.execute(stmt).scalar_one()
         self.session.commit()
 
-    # ---------------------------------
-    # List all
-    # ---------------------------------
-    def list_all_profiles(self) -> list[CategoryProfile]:
+        return self._to_entity(result)
 
-        stmt = (
-            select(CategoryProfileModel, CategoryModel)
-            .join(
-                CategoryModel,
-                CategoryModel.id == CategoryProfileModel.category_id,
-            )
-        )
+    # --------------------------------------------------
+    # Batch Save
+    # --------------------------------------------------
+    def save_batch(
+        self,
+        profiles: Iterable[CategoryProfile],
+        chunk_size: int = 100,
+    ) -> list[CategoryProfile]:
 
-        rows = self.session.execute(stmt).all()
+        profiles = list(profiles)
 
-        if not rows:
+        if not profiles:
             return []
 
-        return [
-            self._to_entity(profile_row, category_row)
-            for profile_row, category_row in rows
-            ]
+        saved: list[CategoryProfile] = []
 
-    # ---------------------------------
-    # Mapper
-    # ---------------------------------
+        for i in range(0, len(profiles), chunk_size):
+
+            chunk = profiles[i : i + chunk_size]
+
+            stmt = insert(CategoryProfileModel).values(
+                [
+                    {
+                        "category_id": p.category.id,
+                        "allowed_genders": list(p.constraints.allowed_genders),
+                        "allowed_business_types": list(
+                            p.constraints.allowed_business_types
+                        ),
+                    }
+                    for p in chunk
+                ]
+            )
+
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["category_id"],
+                set_={
+                    "allowed_genders": stmt.excluded.allowed_genders,
+                    "allowed_business_types": stmt.excluded.allowed_business_types,
+                },
+            ).returning(CategoryProfileModel)
+
+            results = self.session.execute(stmt).scalars().all()
+            saved.extend(results)
+
+        self.session.commit()
+
+        return [self._to_entity(r) for r in saved]
+
+    # --------------------------------------------------
+    # Constraint Matching
+    # --------------------------------------------------
+    def get_profiles_by_constraints(
+        self,
+        constraints: CategoryConstraints,
+        limit: int | None = None,
+    ) -> list[CategoryProfile]:
+
+        stmt = select(CategoryProfileModel).options(
+            selectinload(CategoryProfileModel.category)
+        )
+
+        if constraints.allowed_genders:
+            stmt = stmt.where(
+                CategoryProfileModel.allowed_genders.overlap(
+                    list(constraints.allowed_genders)
+                )
+            )
+
+        if constraints.allowed_business_types:
+            stmt = stmt.where(
+                CategoryProfileModel.allowed_business_types.overlap(
+                    list(constraints.allowed_business_types)
+                )
+            )
+
+        stmt = stmt.order_by(CategoryProfileModel.category_id)
+
+        if limit:
+            stmt = stmt.limit(limit)
+
+        rows = self.session.execute(stmt).scalars().all()
+
+        return [self._to_entity(r) for r in rows]
+
+    # --------------------------------------------------
+    # Private loaders
+    # --------------------------------------------------
+    def _get_by_category_id(
+        self,
+        category_id: UUID,
+    ) -> CategoryProfile | None:
+
+        stmt = (
+            select(CategoryProfileModel)
+            .options(selectinload(CategoryProfileModel.category))
+            .where(CategoryProfileModel.category_id == category_id)
+        )
+
+        result = self.session.execute(stmt).scalar_one_or_none()
+
+        return self._to_entity(result) if result else None
+
+    # --------------------------------------------------
+    # Mapper (Clean Domain Hydration)
+    # --------------------------------------------------
     @staticmethod
-    def _to_entity(
-        profile_model: CategoryProfileModel,
-        category_model: CategoryModel,
-    ) -> CategoryProfile:
+    def _to_entity(model: CategoryProfileModel) -> CategoryProfile:
+
+        category_model = model.category
 
         category = Category(
             id=category_model.id,
             name=category_model.name,
             description=category_model.description,
             semantic_hash=SemanticHash(category_model.semantic_hash),
-            keywords=json_to_set(category_model.keywords_json),
+            keywords=set(json_to_set(category_model.keywords_json or "[]")),
             parent_id=category_model.parent_id,
         )
 
         constraints = CategoryConstraints(
-            allowed_genders=json_to_set(profile_model.allowed_genders_json),
-            allowed_business_types=json_to_set(profile_model.allowed_business_types_json),
+            allowed_genders=set(model.allowed_genders or []),
+            allowed_business_types=set(model.allowed_business_types or []),
         )
 
         return CategoryProfile(

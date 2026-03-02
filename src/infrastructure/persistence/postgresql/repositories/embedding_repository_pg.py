@@ -15,8 +15,11 @@ from sqlalchemy.orm import Session
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.embeddings.embedding import Embedding
+from domain.entities.categories.category_profile import CategoryProfile
+
 from application.ports.embedding_repository import EmbeddingRepository
 from infrastructure.persistence.postgresql.models.embedding_model import EmbeddingModel
+from infrastructure.persistence.postgresql.models.category_profile_model import CategoryProfileModel
 
 from utils.vectors import normalize_vector
 
@@ -122,6 +125,7 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
     def search_similar(
         self,
         query_vector: list[float],
+        profiles: list[CategoryProfile],
         limit: int = 10,
     ) -> List[Tuple[Embedding, float]]:
 
@@ -131,15 +135,43 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         if limit <= 0:
             raise ValueError("limit must be > 0")
 
+        if not profiles:
+            return []
+
+        # -----------------------------
+        # Normalize query vector
+        # -----------------------------
         q_vec = self._prepare_vector(query_vector)
 
-        # Convert distance → similarity score
-        distance_expr = EmbeddingModel.vector.cosine_distance(q_vec)
-        similarity_expr = (1.0 - distance_expr).label("similarity")
+        # -----------------------------
+        # Similarity score
+        # -----------------------------
+        similarity_expr = (
+            (1.0 - EmbeddingModel.vector.cosine_distance(q_vec))
+            .label("similarity")
+        )
 
+        # -----------------------------
+        # Base query
+        # -----------------------------
+        stmt = select(EmbeddingModel, similarity_expr)
+
+        # -----------------------------
+        # Profile-based category filtering
+        # -----------------------------
+        category_ids = {p.category.id for p in profiles if p and p.category}
+
+        if category_ids:
+            stmt = stmt.where(
+                EmbeddingModel.category_id.in_(category_ids)
+            )
+
+        # -----------------------------
+        # Ranking
+        # -----------------------------
         stmt = (
-            select(EmbeddingModel, similarity_expr)
-            .order_by(similarity_expr.desc())  # higher similarity first
+            stmt
+            .order_by(similarity_expr.desc())
             .limit(limit)
         )
 
@@ -148,8 +180,10 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         results: List[Tuple[Embedding, float]] = []
 
         for model, similarity in rows:
+            score = max(0.0, min(1.0, float(similarity)))
+
             results.append(
-                (self._to_entity(model), float(similarity))
+                (self._to_entity(model), score)
             )
 
         return results
