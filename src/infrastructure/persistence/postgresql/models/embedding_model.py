@@ -34,8 +34,8 @@ class EmbeddingModel(Base):
         primary_key=True
     )
 
-    category_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+    category_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("categories.id", ondelete="CASCADE"),
         nullable=False,
         index=True

@@ -36,7 +36,12 @@ class CategoryRepositoryPG(CategoryRepository):
         stmt = insert(CategoryModel).values(
             id=category.id,
             name=category.name,
+            level=category.level,
             description=category.description,
+            url=category.url,
+            brand=category.brand,
+            direction=category.direction,
+            business=category.business,
             semantic_hash=str(category.semantic_hash),
             keywords_json=set_to_json(category.keywords),
             parent_id=category.parent_id,
@@ -49,6 +54,11 @@ class CategoryRepositoryPG(CategoryRepository):
                 "description": stmt.excluded.description,
                 "keywords_json": stmt.excluded.keywords_json,
                 "parent_id": stmt.excluded.parent_id,
+                "level": stmt.excluded.level,
+                "url": stmt.excluded.url,
+                "brand": stmt.excluded.brand,
+                "direction": stmt.excluded.direction,
+                "business": stmt.excluded.business,
             },
         ).returning(CategoryModel)
 
@@ -143,6 +153,7 @@ class CategoryRepositoryPG(CategoryRepository):
 
         return self._to_entities(results)
 
+
     # ============================================================
     # Mapping helpers
     # ============================================================
@@ -152,7 +163,12 @@ class CategoryRepositoryPG(CategoryRepository):
         return Category(
             id=model.id,
             name=model.name,
+            level=model.level,
             description=model.description,
+            url=model.url,
+            brand=model.brand,
+            direction=model.direction,
+            business=model.business,
             semantic_hash=SemanticHash(model.semantic_hash),
             keywords=json_to_set(model.keywords_json),
             parent_id=model.parent_id,

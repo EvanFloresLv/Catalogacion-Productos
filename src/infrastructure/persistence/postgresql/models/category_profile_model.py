@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, UniqueConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, ARRAY, TEXT
+from sqlalchemy.dialects.postgresql import ARRAY, TEXT
 
 # ---------------------------------------------------------------------
 # Internal application imports
@@ -24,8 +24,8 @@ if TYPE_CHECKING:
 class CategoryProfileModel(Base):
     __tablename__ = "category_profiles"
 
-    category_id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True),
+    category_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("categories.id", ondelete="CASCADE"),
         primary_key=True,
     )
@@ -37,6 +37,24 @@ class CategoryProfileModel(Base):
     )
 
     allowed_business_types: Mapped[list[str] | None] = mapped_column(
+        ARRAY(TEXT),
+        nullable=True,
+        default=list,
+    )
+
+    allowed_directions: Mapped[list[str] | None] = mapped_column(
+        ARRAY(TEXT),
+        nullable=True,
+        default=list,
+    )
+
+    allowed_brands: Mapped[list[str] | None] = mapped_column(
+        ARRAY(TEXT),
+        nullable=True,
+        default=list,
+    )
+
+    required_keywords: Mapped[list[str] | None] = mapped_column(
         ARRAY(TEXT),
         nullable=True,
         default=list,

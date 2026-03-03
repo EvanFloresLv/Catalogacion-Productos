@@ -54,4 +54,4 @@ class Product:
 
     def to_embedding_text(self) -> str:
         keywords = ", ".join(self.keywords)
-        return f"TITLE: {self.title}\nDESCRIPTION: {self.description}\nKEYWORDS: {keywords}"
+        return f"TÍTULO: {self.title}\nDESCRIPCIÓN: {self.description}\nPALABRAS CLAVE: {keywords}"

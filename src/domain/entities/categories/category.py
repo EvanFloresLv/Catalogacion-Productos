@@ -29,7 +29,7 @@ class Category:
 
     brand: str
     direction: str
-    bussiness: str
+    business: str
 
     semantic_hash: str
 
@@ -43,14 +43,20 @@ class Category:
         url: str | None = None,
         brand: str | None = None,
         direction: str | None = None,
-        bussiness: str | None = None,
+        business: str | None = None,
         parent_id: str | None = None
     ) -> Category:
         name = name.strip()
         description = description.strip()
 
-        if not id or not url or not name or not description:
-            raise CategoryNameError("Category ID, URL, name, and description cannot be empty.")
+        if not id:
+            raise CategoryNameError("Category ID cannot be empty.")
+
+        if not name:
+            raise CategoryNameError("Category name cannot be empty.")
+
+        if not isinstance(level, int) or level < 1:
+            raise CategoryNameError("Category level must be a positive integer.")
 
         if len(name) > 100:
             raise CategoryNameError("Category name cannot exceed 100 characters.")
@@ -61,9 +67,10 @@ class Category:
             name=name,
             level=level,
             description=description,
+            url=url,
             brand=brand,
             direction=direction,
-            bussiness=bussiness,
+            business=business,
             semantic_hash=SemanticHash.from_text(description).value,
             keywords=keywords,
         )
@@ -74,5 +81,5 @@ class Category:
         return f"TÍTULO: {self.name}\nDESCRIPCIÓN: {self.description}\nPALABRAS CLAVE: {keywords}"
 
 
-    def with_id(self, new_id: str) -> Category:
-        return replace(self, id=new_id)
+    def with_id(self, id: str) -> Category:
+        return replace(self, id=id)

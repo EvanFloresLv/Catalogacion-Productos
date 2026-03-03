@@ -1,4 +1,6 @@
-from infrastructure.embeddings.gemini.client import EmbeddingClientHTTP
+from infrastructure.embeddings.gemini.client import EmbeddingClient
+
+from application.use_cases.categories.load_file import LoadCategoriesFileUseCase, LoadCategoriesCommand
 
 import domain as dom
 import application as app
@@ -10,7 +12,7 @@ from infrastructure.persistence.postgresql.session import SessionLocal
 
 def test_embedding_generation():
 
-    embedding = EmbeddingClientHTTP()
+    embedding = EmbeddingClient()
 
     category = dom.Category.create(
         name="Test Category",
@@ -39,7 +41,7 @@ def test_hashing():
 def test_unique_hashes():
 
     with SessionLocal() as session:
-        embedding = EmbeddingClientHTTP()
+        embedding = EmbeddingClient()
         cat_repository = pg.CategoryRepositoryPG(session)
         emb_repository = pg.EmbeddingRepositoryPG(session)
 
@@ -97,20 +99,26 @@ def test_constraints():
 
     with SessionLocal() as session:
 
-        embedding = EmbeddingClientHTTP()
+        embedding = EmbeddingClient()
         cat_repository = pg.CategoryRepositoryPG(session)
         prof_repository = pg.CategoryProfileRepositoryPG(session)
         emb_repository = pg.EmbeddingRepositoryPG(session)
 
 
         category_1 = dom.Category.create(
+            id="cat_01",
             name="Category 1",
+            url="https://example.com/cat_01",
+            level=1,
             description="A category for testing purposes.",
             keywords=["test", "category", "embedding"],
         )
 
         category_2 = dom.Category.create(
+            id="cat_02",
             name="Category 2",
+            url="https://example.com/cat_02",
+            level=1,
             description="Another category for testing experiment purposes.",
             keywords=["test", "category", "embedding"],
         )
@@ -167,7 +175,10 @@ def test_constraints():
         profiles = prof_repository.get_profiles_by_constraints(
             dom.CategoryConstraints.create(
                 allowed_genders=[product.gender],
-                allowed_business_types=[product.business_type]
+                allowed_business_types=[product.business_type],
+                allowed_directions=[],
+                allowed_brands=[],
+                required_keywords=[]
             )
         )
 
@@ -190,7 +201,7 @@ def test_elegibility_policy():
 
     with SessionLocal() as session:
 
-        embedding = EmbeddingClientHTTP()
+        embedding = EmbeddingClient()
 
         cat_repository = pg.CategoryRepositoryPG(session)
         prof_repository = pg.CategoryProfileRepositoryPG(session)
@@ -306,7 +317,23 @@ def test_elegibility_policy():
 
 
 def test_load_tree_policy():
-    pass
+    cmd = LoadCategoriesCommand(file_path="./data/suburbia.xlsx")
+
+    with SessionLocal() as session:
+
+        embedding = EmbeddingClient()
+        cat_repository = pg.CategoryRepositoryPG(session)
+        prof_repository = pg.CategoryProfileRepositoryPG(session)
+        emb_repository = pg.EmbeddingRepositoryPG(session)
+
+        use_case = LoadCategoriesFileUseCase(
+            category_repository=cat_repository,
+            profiles_repository=prof_repository,
+            embedding_repository=emb_repository,
+            embedding_service=embedding
+        )
+
+        use_case.execute(cmd)
 
 
 if __name__ == "__main__":
@@ -314,4 +341,5 @@ if __name__ == "__main__":
     # test_hashing()
     # test_unique_hashes()
     # test_constraints()
-    test_elegibility_policy()
+    # test_elegibility_policy()
+    test_load_tree_policy()

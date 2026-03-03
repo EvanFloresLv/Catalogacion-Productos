@@ -28,7 +28,7 @@ from utils.retry import sync_exponential_backoff_retry_sync
 # Embedding Client (SYNC)
 # ================================================================
 
-class EmbeddingClientHTTP(EmbeddingService):
+class EmbeddingClient(EmbeddingService):
 
     def __init__(
         self,

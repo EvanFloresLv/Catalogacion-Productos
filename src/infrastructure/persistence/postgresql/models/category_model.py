@@ -8,9 +8,8 @@ from typing import Optional, TYPE_CHECKING
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import String, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import String, ForeignKey, Text, UniqueConstraint, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
 
 # ---------------------------------------------------------------------
 # Internal application imports
@@ -25,18 +24,25 @@ class CategoryModel(Base):
     __tablename__ = "categories"
 
     id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True),
+        String(36),
         primary_key=True,
         nullable=False,
     )
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    semantic_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    keywords_json: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    parent_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    business: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    semantic_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    keywords_json: Mapped[list[str]] = mapped_column(Text, nullable=False)
+
+    parent_id: Mapped[str | None] = mapped_column(
+        String(36),
         ForeignKey("categories.id"),
         nullable=True,
     )

@@ -133,19 +133,14 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
             selectinload(CategoryProfileModel.category)
         )
 
-        if constraints.allowed_genders:
-            stmt = stmt.where(
-                CategoryProfileModel.allowed_genders.overlap(
-                    list(constraints.allowed_genders)
+        for attr in constraints.__dataclass_fields__.keys():
+            print(attr, getattr(constraints, attr))
+            if getattr(constraints, attr):
+                stmt = stmt.where(
+                    getattr(CategoryProfileModel, attr).overlap(
+                        list(getattr(constraints, attr))
+                    )
                 )
-            )
-
-        if constraints.allowed_business_types:
-            stmt = stmt.where(
-                CategoryProfileModel.allowed_business_types.overlap(
-                    list(constraints.allowed_business_types)
-                )
-            )
 
         stmt = stmt.order_by(CategoryProfileModel.category_id)
 
@@ -185,7 +180,12 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
         category = Category(
             id=category_model.id,
             name=category_model.name,
+            level=category_model.level,
             description=category_model.description,
+            url=category_model.url,
+            brand=category_model.brand,
+            direction=category_model.direction,
+            business=category_model.business,
             semantic_hash=SemanticHash(category_model.semantic_hash),
             keywords=set(json_to_set(category_model.keywords_json or "[]")),
             parent_id=category_model.parent_id,
@@ -194,6 +194,9 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
         constraints = CategoryConstraints(
             allowed_genders=set(model.allowed_genders or []),
             allowed_business_types=set(model.allowed_business_types or []),
+            allowed_directions=set(model.allowed_directions or []),
+            allowed_brands=set(model.allowed_brands or []),
+            required_keywords=set(model.required_keywords or []),
         )
 
         return CategoryProfile(

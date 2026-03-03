@@ -6,7 +6,7 @@ from uuid import UUID as PyUUID
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import ForeignKey, Text, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -26,8 +26,8 @@ class ProductCategoryExclusionModel(Base):
         nullable=False,
     )
 
-    category_id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True),
+    category_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("categories.id", ondelete="CASCADE"),
         primary_key=True,
         nullable=False,
