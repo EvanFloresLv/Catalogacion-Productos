@@ -2,8 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 from uuid import UUID
-from dataclasses import asdict
-import json
+from dataclasses import fields
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -16,10 +15,10 @@ from sqlalchemy.orm import Session
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.categories.category import Category
-from domain.value_objects.semantic_hash import SemanticHash
 from application.ports.category_repository import CategoryRepository
-from infrastructure.persistence.postgresql.models.category_model import CategoryModel
-from utils.json import json_to_set
+from infrastructure.persistence.postgresql.models.category_model import (
+    CategoryModel,
+)
 
 
 class CategoryRepositoryPG(CategoryRepository):
@@ -32,27 +31,20 @@ class CategoryRepositoryPG(CategoryRepository):
     # ============================================================
 
     def save(self, category: Category) -> Category:
-        cat_data = self._build_data(category)
 
-        stmt = insert(CategoryModel).values(**cat_data)
+        row = self._build_row(category)
 
-        update_fields = {
-            column.name: getattr(stmt.excluded, column.name)
-            for column in CategoryModel.__table__.columns
-            if column.name != "id"
-        }
+        stmt = insert(CategoryModel).values(**row)
 
         stmt = (
             stmt.on_conflict_do_update(
                 index_elements=["id"],
-                set_=update_fields,
+                set_=self._build_update_map(stmt),
             )
             .returning(CategoryModel)
         )
 
         result = self.session.execute(stmt).scalar_one()
-
-        # ensure visibility inside transaction
         self.session.flush()
 
         return self._to_entity(result)
@@ -60,30 +52,23 @@ class CategoryRepositoryPG(CategoryRepository):
     # -------------------------------------------------------------
 
     def save_batch(self, categories: list[Category]) -> list[Category]:
+
         if not categories:
             return []
 
-        values = [self._build_data(cat) for cat in categories]
+        rows = [self._build_row(cat) for cat in categories]
 
-        stmt = insert(CategoryModel).values(values)
-
-        update_fields = {
-            column.name: getattr(stmt.excluded, column.name)
-            for column in CategoryModel.__table__.columns
-            if column.name != "id"
-        }
+        stmt = insert(CategoryModel).values(rows)
 
         stmt = (
             stmt.on_conflict_do_update(
                 index_elements=["id"],
-                set_=update_fields,
+                set_=self._build_update_map(stmt),
             )
             .returning(CategoryModel)
         )
 
         results = self.session.execute(stmt).scalars().all()
-
-        # single flush for entire batch
         self.session.flush()
 
         return [self._to_entity(r) for r in results]
@@ -97,20 +82,20 @@ class CategoryRepositoryPG(CategoryRepository):
         results = self.session.execute(stmt).scalars().all()
         return self._to_entities(results)
 
-
     def get_by_id(self, category_id: UUID) -> Category | None:
         stmt = select(CategoryModel).where(CategoryModel.id == category_id)
         result = self.session.execute(stmt).scalar_one_or_none()
         return self._to_entity(result) if result else None
 
-
     def get_by_ids(self, category_ids: list[UUID]) -> list[Category]:
+
         if not category_ids:
             return []
 
         stmt = select(CategoryModel).where(
             CategoryModel.id.in_(category_ids)
         )
+
         results = self.session.execute(stmt).scalars().all()
         return self._to_entities(results)
 
@@ -119,28 +104,79 @@ class CategoryRepositoryPG(CategoryRepository):
     # ============================================================
 
     @staticmethod
-    def _build_data(category: Category) -> dict:
-        data = asdict(category)
-        data["keywords_json"] = list(category.keywords_json)
+    def _build_row(category: Category) -> dict:
+        """
+        Dynamically build persistence row from Category entity.
+        Excludes init=False fields automatically.
+        """
 
-        return data
+        row = {}
 
+        for field in fields(Category):
+
+            # Skip computed fields (init=False)
+            if not field.init:
+                continue
+
+            value = getattr(category, field.name)
+
+            # Convert tuple -> list for Postgres arrays
+            if field.name == "keywords_json":
+                value = list(value or [])
+
+            row[field.name] = value
+
+        # Persist derived field explicitly if needed
+        # (safe because it is read-only in entity)
+        row["semantic_hash"] = category.semantic_hash
+
+        return row
+
+    # -------------------------------------------------------------
+
+    @staticmethod
+    def _build_update_map(stmt) -> dict:
+        """
+        Dynamically build ON CONFLICT update map.
+        Excludes primary key.
+        """
+
+        return {
+            column.name: getattr(stmt.excluded, column.name)
+            for column in CategoryModel.__table__.columns
+            if column.name != "id"
+        }
+
+    # -------------------------------------------------------------
 
     @staticmethod
     def _to_entity(model: CategoryModel) -> Category:
-        return Category(
-            id=model.id,
-            name=model.name,
-            level=model.level,
-            description=model.description,
-            url=model.url,
-            brand=model.brand,
-            direction=model.direction,
-            business=model.business,
-            semantic_hash=SemanticHash(model.semantic_hash),
-            keywords_json=tuple(model.keywords_json),
-            parent_id=model.parent_id,
+        """
+        Dynamic domain hydration.
+        Only inject init=True fields.
+        """
+
+        init_fields = {
+            field.name
+            for field in fields(Category)
+            if field.init
+        }
+
+        entity = Category(
+            **{
+                field: getattr(model, field)
+                for field in init_fields
+                if hasattr(model, field)
+            }
         )
 
-    def _to_entities(self, models: list[CategoryModel]) -> list[Category]:
+        return entity
+
+    # -------------------------------------------------------------
+
+    def _to_entities(
+        self,
+        models: list[CategoryModel],
+    ) -> list[Category]:
+
         return [self._to_entity(m) for m in models]

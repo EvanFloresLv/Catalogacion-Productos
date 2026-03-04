@@ -3,8 +3,8 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from typing import Tuple, Iterable
+from dataclasses import dataclass, field, fields, replace, asdict
+from typing import Tuple, Iterable, Any
 import re
 import unicodedata
 
@@ -15,145 +15,159 @@ from .errors import CategoryNameError
 from domain.value_objects.semantic_hash import SemanticHash
 
 
-# ---------------------------------------------------------------------
+# -------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------
+# -------------------------------------------------------------
 def _normalize_text(value: str | None) -> str:
-    if not value:
-        return ""
-    value = unicodedata.normalize("NFKD", value)
+    if value is None:
+        return value
+
+    value = unicodedata.normalize("NFKD", str(value))
     value = re.sub(r"\s+", " ", value)
-    return value.strip()
+    value = value.strip()
+
+    return value or None
 
 
-def _normalize_keywords(keywords: Iterable[str] | None) -> Tuple[str, ...]:
-    if not keywords:
-        return ()
+def _normalize_keywords(values: Iterable[str] | None) -> Tuple[str, ...]:
+    if not values:
+        return None
 
     normalized = {
-        _normalize_text(k).lower()
-        for k in keywords
-        if isinstance(k, str) and k.strip()
+        _normalize_text(v).lower()
+        for v in values
+        if isinstance(v, str) and v.strip()
     }
 
     return tuple(sorted(normalized))
 
 
-# ---------------------------------------------------------------------
+# -------------------------------------------------------------
 # Entity
-# ---------------------------------------------------------------------
+# -------------------------------------------------------------
 @dataclass(frozen=True, slots=True)
 class Category:
-    id: str
-    parent_id: str | None
 
+    # ---------------------------------------------------------
+    # Required fields
+    # ---------------------------------------------------------
+    id: str
     name: str
     level: int
-    description: str
-    url: str | None
-    keywords_json: Tuple[str, ...]
-
-    brand: str | None
-    direction: str | None
-    business: str | None
-
     semantic_hash: str
 
-    # -------------------------------------------------------------
+    # ---------------------------------------------------------
+    # Optional fields
+    # ---------------------------------------------------------
+    parent_id: str | None = None
+    description: str | None = None
+    url: str | None = None
+    brand: str | None = None
+    direction: str | None = None
+    business: str | None = None
+
+    # ---------------------------------------------------------
+    # Structured fields
+    # ---------------------------------------------------------
+    keywords_json: Tuple[str, ...] = field(default_factory=tuple)
+
+    # ---------------------------------------------------------
     # Factory
-    # -------------------------------------------------------------
+    # ---------------------------------------------------------
+    @classmethod
+    def create(cls, **data: Any) -> Category:
+        """
+        Flexible factory:
+        - Auto-maps dataclass fields
+        - Rejects unknown fields
+        - Normalizes consistently
+        - Computes semantic_hash internally
+        """
+
+        field_names = {f.name for f in fields(cls)}
+        allowed_input_fields = field_names - {"semantic_hash"}
+
+        # -----------------------------
+        # Guard against unknown fields
+        # -----------------------------
+        unknown = set(data.keys()) - allowed_input_fields
+        if unknown:
+            raise CategoryNameError(
+                f"Unknown fields for Category: {unknown}"
+            )
+
+        normalized: dict[str, Any] = {}
+
+        for field_name in allowed_input_fields:
+            value = data.get(field_name)
+
+            if field_name == "keywords_json":
+                normalized[field_name] = _normalize_keywords(value)
+            elif isinstance(value, str) or value is None:
+                normalized[field_name] = _normalize_text(value)
+            else:
+                normalized[field_name] = value
+
+        normalized["semantic_hash"] = SemanticHash.from_text(
+            cls._build_embedding_text(
+                name=normalized["name"],
+                description=normalized.get("description", ""),
+                keywords=normalized.get("keywords_json", ()),
+            )
+        ).value
+
+        # -----------------------------
+        # Validation
+        # -----------------------------
+        cls._validate(normalized)
+        return cls(**normalized)
+
+    # ---------------------------------------------------------
+    # Validation
+    # ---------------------------------------------------------
     @staticmethod
-    def create(
-        id: str,
-        name: str,
-        level: int,
-        description: str = "",
-        keywords_json: Iterable[str] | None = None,
-        url: str | None = None,
-        brand: str | None = None,
-        direction: str | None = None,
-        business: str | None = None,
-        parent_id: str | None = None,
-    ) -> Category:
+    def _validate(data: dict[str, Any]) -> None:
 
-        id = _normalize_text(id)
-        name = _normalize_text(name)
-        description = _normalize_text(description)
-        url = _normalize_text(url)
-        brand = _normalize_text(brand)
-        direction = _normalize_text(direction)
-        business = _normalize_text(business)
-        keywords_json = _normalize_keywords(keywords_json)
-
-        # -------------------------
-        # Domain validations
-        # -------------------------
-        if not id:
+        if not data.get("id"):
             raise CategoryNameError("Category ID cannot be empty.")
 
-        if not name:
+        if not data.get("name"):
             raise CategoryNameError("Category name cannot be empty.")
 
-        if level < 1:
-            raise CategoryNameError("Category level must be >= 1.")
+        level = data.get("level")
+        if not isinstance(level, int) or level < 1:
+            raise CategoryNameError(
+                "Category level must be a positive integer."
+            )
 
-        if len(name) > 100:
+        if len(data["name"]) > 100:
             raise CategoryNameError(
                 "Category name cannot exceed 100 characters."
             )
 
-        if parent_id and parent_id == id:
+        if data.get("parent_id") == data.get("id"):
             raise CategoryNameError(
                 "Category cannot reference itself as parent."
             )
 
-        # -------------------------
-        # Semantic hash (deterministic)
-        # -------------------------
-        embedding_text = Category._build_embedding_text(
-            name=name,
-            description=description,
-            keywords_json=keywords_json,
-        )
-
-        semantic_hash = SemanticHash.from_text(
-            embedding_text
-        ).value
-
-        return Category(
-            id=id,
-            parent_id=parent_id,
-            name=name,
-            level=level,
-            description=description,
-            url=url,
-            keywords_json=keywords_json,
-            brand=brand,
-            direction=direction,
-            business=business,
-            semantic_hash=semantic_hash,
-        )
-
-    # -------------------------------------------------------------
-    # Internal text builder
-    # -------------------------------------------------------------
+    # ---------------------------------------------------------
+    # Embedding text builder
+    # ---------------------------------------------------------
     @staticmethod
     def _build_embedding_text(
         name: str,
         description: str,
-        keywords_json: Tuple[str, ...],
+        keywords: Tuple[str, ...],
     ) -> str:
-
-        keywords_str = ", ".join(keywords_json)
         return (
             f"TÍTULO: {name}\n"
             f"DESCRIPCIÓN: {description}\n"
-            f"PALABRAS CLAVE: {keywords_str}"
+            f"PALABRAS CLAVE: {', '.join(keywords)}"
         )
 
-    # -------------------------------------------------------------
+    # ---------------------------------------------------------
     # Public behavior
-    # -------------------------------------------------------------
+    # ---------------------------------------------------------
     def to_embedding_text(self) -> str:
         return self._build_embedding_text(
             self.name,
@@ -167,16 +181,4 @@ class Category:
 
 
     def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "parent_id": self.parent_id,
-            "name": self.name,
-            "level": self.level,
-            "description": self.description,
-            "url": self.url,
-            "keywords_json": set(self.keywords_json),
-            "brand": self.brand,
-            "direction": self.direction,
-            "business": self.business,
-            "semantic_hash": self.semantic_hash,
-        }
+        return asdict(self)

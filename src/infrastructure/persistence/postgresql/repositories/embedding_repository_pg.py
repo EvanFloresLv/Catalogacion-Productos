@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------
 from uuid import UUID
 from typing import Optional, List, Tuple
+from dataclasses import fields
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -15,36 +16,34 @@ from sqlalchemy.orm import Session
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.embeddings.embedding import Embedding
-from domain.entities.categories.category_profile import CategoryProfile
-
 from application.ports.embedding_repository import EmbeddingRepository
-from infrastructure.persistence.postgresql.models.embedding_model import EmbeddingModel
-from infrastructure.persistence.postgresql.models.category_profile_model import CategoryProfileModel
-
-from utils.vectors import normalize_vector
+from infrastructure.persistence.postgresql.models.embedding_model import (
+    EmbeddingModel,
+)
 
 
 class EmbeddingRepositoryPG(EmbeddingRepository):
 
-    def __init__(self, session: Session, expected_dimension: int = 768):
+    DEFAULT_BATCH_SIZE = 1000
+
+    def __init__(
+        self,
+        session: Session,
+        expected_dimension: int,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ):
         self.session = session
         self.expected_dimension = expected_dimension
+        self.batch_size = batch_size
 
     # ============================================================
     # Persistence
     # ============================================================
 
     def save(self, embedding: Embedding) -> None:
-        vec = self._prepare_vector(embedding.vector)
+        row = self._build_row(embedding)
 
-        stmt = insert(EmbeddingModel).values(
-            id=embedding.id,
-            category_id=embedding.category_id,
-            vector=vec,
-            content_hash=embedding.content_hash,
-            dimension=len(vec),
-            created_at=embedding.created_at,
-        )
+        stmt = insert(EmbeddingModel).values(**row)
 
         stmt = stmt.on_conflict_do_update(
             index_elements=["category_id", "content_hash"],
@@ -55,7 +54,7 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         )
 
         self.session.execute(stmt)
-        self.session.commit()
+        self.session.flush()
 
     # -------------------------------------------------------------
 
@@ -63,33 +62,24 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         if not embeddings:
             return
 
-        values = []
-        for e in embeddings:
-            vec = self._prepare_vector(e.vector)
+        for i in range(0, len(embeddings), self.batch_size):
+            chunk = embeddings[i : i + self.batch_size]
 
-            values.append(
-                {
-                    "id": e.id,
-                    "category_id": e.category_id,
-                    "vector": vec,
-                    "content_hash": e.content_hash,
-                    "dimension": len(vec),
-                    "created_at": e.created_at,
-                }
+            rows = [self._build_row(e) for e in chunk]
+
+            stmt = insert(EmbeddingModel).values(rows)
+
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["category_id", "content_hash"],
+                set_={
+                    "vector": stmt.excluded.vector,
+                    "dimension": stmt.excluded.dimension,
+                },
             )
 
-        stmt = insert(EmbeddingModel).values(values)
+            self.session.execute(stmt)
 
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["category_id", "content_hash"],
-            set_={
-                "vector": stmt.excluded.vector,
-                "dimension": stmt.excluded.dimension,
-            },
-        )
-
-        self.session.execute(stmt)
-        self.session.commit()
+        self.session.flush()
 
     # ============================================================
     # Retrieval
@@ -119,13 +109,13 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         return [self._to_entity(r) for r in results]
 
     # ============================================================
-    # Semantic Search (Improved Similarity)
+    # Semantic Search
     # ============================================================
 
     def search_similar(
         self,
         query_vector: list[float],
-        profiles: list[CategoryProfile],
+        category_ids: list[UUID],
         limit: int = 10,
     ) -> List[Tuple[Embedding, float]]:
 
@@ -135,40 +125,20 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         if limit <= 0:
             raise ValueError("limit must be > 0")
 
-        if not profiles:
-            return []
+        self._validate_dimension(query_vector)
 
-        # -----------------------------
-        # Normalize query vector
-        # -----------------------------
-        q_vec = self._prepare_vector(query_vector)
-
-        # -----------------------------
-        # Similarity score
-        # -----------------------------
         similarity_expr = (
-            (1.0 - EmbeddingModel.vector.cosine_distance(q_vec))
+            (1.0 - EmbeddingModel.vector.cosine_distance(query_vector))
             .label("similarity")
         )
 
-        # -----------------------------
-        # Base query
-        # -----------------------------
         stmt = select(EmbeddingModel, similarity_expr)
-
-        # -----------------------------
-        # Profile-based category filtering
-        # -----------------------------
-        category_ids = {p.category.id for p in profiles if p and p.category}
 
         if category_ids:
             stmt = stmt.where(
                 EmbeddingModel.category_id.in_(category_ids)
             )
 
-        # -----------------------------
-        # Ranking
-        # -----------------------------
         stmt = (
             stmt
             .order_by(similarity_expr.desc())
@@ -181,40 +151,54 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
 
         for model, similarity in rows:
             score = max(0.0, min(1.0, float(similarity)))
-
-            results.append(
-                (self._to_entity(model), score)
-            )
+            results.append((self._to_entity(model), score))
 
         return results
 
     # ============================================================
-    # Internal helpers
+    # Internal Helpers
     # ============================================================
 
-    def _prepare_vector(self, vector: list[float]) -> list[float]:
+    @staticmethod
+    def _build_row(embedding: Embedding) -> dict:
+        """
+        Build dynamic insert row from Embedding entity.
+        Avoids hardcoding attribute names.
+        """
+
+        row = {}
+
+        for field in fields(embedding):
+            row[field.name] = getattr(embedding, field.name)
+
+        # Ensure dimension consistency
+        vector = row.get("vector")
+
         if not vector:
             raise ValueError("Embedding vector cannot be empty")
 
-        vec = normalize_vector(list(vector))
+        row["dimension"] = len(vector)
 
-        if len(vec) != self.expected_dimension:
+        return row
+
+    # -------------------------------------------------------------
+
+    def _validate_dimension(self, vector: list[float]) -> None:
+        if not vector:
+            raise ValueError("Embedding vector cannot be empty")
+
+        if len(vector) != self.expected_dimension:
             raise ValueError(
                 f"Embedding dimension mismatch. "
-                f"Expected {self.expected_dimension}, got {len(vec)}"
+                f"Expected {self.expected_dimension}, got {len(vector)}"
             )
-
-        return vec
 
     # -------------------------------------------------------------
 
     @staticmethod
     def _to_entity(model: EmbeddingModel) -> Embedding:
+        field_names = {f.name for f in fields(Embedding)}
+
         return Embedding(
-            id=model.id,
-            category_id=model.category_id,
-            vector=model.vector,
-            content_hash=model.content_hash,
-            dimension=model.dimension,
-            created_at=model.created_at,
+            **{field: getattr(model, field) for field in field_names}
         )

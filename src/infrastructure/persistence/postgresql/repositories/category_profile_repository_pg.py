@@ -1,8 +1,8 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
-from uuid import UUID
 from typing import Iterable
+from dataclasses import fields
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -15,15 +15,16 @@ from sqlalchemy.orm import Session, selectinload
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.categories.category import Category
-from domain.value_objects.semantic_hash import SemanticHash
 from domain.entities.categories.category_profile import CategoryProfile
 from domain.entities.categories.category_constraints import CategoryConstraints
 
-from application.ports.category_profile_repository import CategoryProfileRepository
+from application.ports.category_profile_repository import (
+    CategoryProfileRepository,
+)
 
-from infrastructure.persistence.postgresql.models.category_profile_model import CategoryProfileModel
-
-from utils.json import json_to_set
+from infrastructure.persistence.postgresql.models.category_profile_model import (
+    CategoryProfileModel,
+)
 
 
 class CategoryProfileRepositoryPG(CategoryProfileRepository):
@@ -31,50 +32,48 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
     def __init__(self, session: Session):
         self.session = session
 
-    # --------------------------------------------------
+    # ============================================================
     # List all
-    # --------------------------------------------------
+    # ============================================================
+
     def list_all_profiles(self) -> list[CategoryProfile]:
 
         stmt = (
             select(CategoryProfileModel)
-            .options(
-                # Avoid N+1 category loading
-                selectinload(CategoryProfileModel.category)
-            )
+            .options(selectinload(CategoryProfileModel.category))
         )
 
         rows = self.session.execute(stmt).scalars().all()
 
         return [self._to_entity(r) for r in rows]
 
-    # --------------------------------------------------
-    # Save Single
-    # --------------------------------------------------
+    # ============================================================
+    # Save Single (Dynamic Upsert)
+    # ============================================================
+
     def save(self, profile: CategoryProfile) -> CategoryProfile:
 
-        stmt = insert(CategoryProfileModel).values(
-            category_id=profile.category.id,
-            allowed_genders=list(profile.constraints.allowed_genders),
-            allowed_business_types=list(profile.constraints.allowed_business_types),
-        )
+        row = self._build_row(profile)
 
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["category_id"],
-            set_={
-                "allowed_genders": stmt.excluded.allowed_genders,
-                "allowed_business_types": stmt.excluded.allowed_business_types,
-            },
-        ).returning(CategoryProfileModel)
+        stmt = insert(CategoryProfileModel).values(**row)
+
+        stmt = (
+            stmt.on_conflict_do_update(
+                index_elements=["category_id"],
+                set_=self._build_update_map(stmt),
+            )
+            .returning(CategoryProfileModel)
+        )
 
         result = self.session.execute(stmt).scalar_one()
         self.session.commit()
 
         return self._to_entity(result)
 
-    # --------------------------------------------------
-    # Batch Save
-    # --------------------------------------------------
+    # ============================================================
+    # Batch Save (Chunked Dynamic Upsert)
+    # ============================================================
+
     def save_batch(
         self,
         profiles: Iterable[CategoryProfile],
@@ -86,43 +85,35 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
         if not profiles:
             return []
 
-        saved: list[CategoryProfile] = []
+        saved_models: list[CategoryProfileModel] = []
 
         for i in range(0, len(profiles), chunk_size):
 
             chunk = profiles[i : i + chunk_size]
 
-            stmt = insert(CategoryProfileModel).values(
-                [
-                    {
-                        "category_id": p.category.id,
-                        "allowed_genders": list(p.constraints.allowed_genders),
-                        "allowed_business_types": list(
-                            p.constraints.allowed_business_types
-                        ),
-                    }
-                    for p in chunk
-                ]
+            rows = [self._build_row(p) for p in chunk]
+
+            stmt = insert(CategoryProfileModel).values(rows)
+
+            stmt = (
+                stmt.on_conflict_do_update(
+                    index_elements=["category_id"],
+                    set_=self._build_update_map(stmt),
+                )
+                .returning(CategoryProfileModel)
             )
 
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["category_id"],
-                set_={
-                    "allowed_genders": stmt.excluded.allowed_genders,
-                    "allowed_business_types": stmt.excluded.allowed_business_types,
-                },
-            ).returning(CategoryProfileModel)
-
             results = self.session.execute(stmt).scalars().all()
-            saved.extend(results)
+            saved_models.extend(results)
 
         self.session.commit()
 
-        return [self._to_entity(r) for r in saved]
+        return [self._to_entity(r) for r in saved_models]
 
-    # --------------------------------------------------
+    # ============================================================
     # Constraint Matching
-    # --------------------------------------------------
+    # ============================================================
+
     def get_profiles_by_constraints(
         self,
         constraints: CategoryConstraints,
@@ -133,12 +124,13 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
             selectinload(CategoryProfileModel.category)
         )
 
-        for attr in constraints.__dataclass_fields__.keys():
-            print(attr, getattr(constraints, attr))
-            if getattr(constraints, attr):
+        # Dynamically apply overlap filters
+        for field in fields(CategoryConstraints):
+            value = getattr(constraints, field.name)
+            if value:
                 stmt = stmt.where(
-                    getattr(CategoryProfileModel, attr).overlap(
-                        list(getattr(constraints, attr))
+                    getattr(CategoryProfileModel, field.name).overlap(
+                        list(value)
                     )
                 )
 
@@ -151,52 +143,70 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
 
         return [self._to_entity(r) for r in rows]
 
-    # --------------------------------------------------
-    # Private loaders
-    # --------------------------------------------------
-    def _get_by_category_id(
-        self,
-        category_id: UUID,
-    ) -> CategoryProfile | None:
+    # ============================================================
+    # Private Helpers
+    # ============================================================
 
-        stmt = (
-            select(CategoryProfileModel)
-            .options(selectinload(CategoryProfileModel.category))
-            .where(CategoryProfileModel.category_id == category_id)
-        )
+    @staticmethod
+    def _build_row(profile: CategoryProfile) -> dict:
+        """
+        Build dynamic insert row from CategoryProfile entity.
+        """
 
-        result = self.session.execute(stmt).scalar_one_or_none()
+        constraints = profile.constraints
 
-        return self._to_entity(result) if result else None
+        row = {
+            "category_id": profile.category.id,
+        }
 
-    # --------------------------------------------------
-    # Mapper (Clean Domain Hydration)
-    # --------------------------------------------------
+        for field in fields(constraints):
+            value = getattr(constraints, field.name)
+            row[field.name] = list(value or [])
+
+        return row
+
+
+    @staticmethod
+    def _build_update_map(stmt) -> dict:
+        """
+        Build dynamic ON CONFLICT update map.
+        Excludes primary key.
+        """
+
+        return {
+            column.name: getattr(stmt.excluded, column.name)
+            for column in CategoryProfileModel.__table__.columns
+            if column.name != "category_id"
+        }
+
+    # -------------------------------------------------------------
+
     @staticmethod
     def _to_entity(model: CategoryProfileModel) -> CategoryProfile:
 
+        category_field_names = {f.name for f in fields(Category)}
+        constraints_field_names = {
+            f.name for f in fields(CategoryConstraints)
+        }
+
         category_model = model.category
 
+        # Hydrate Category dynamically
         category = Category(
-            id=category_model.id,
-            name=category_model.name,
-            level=category_model.level,
-            description=category_model.description,
-            url=category_model.url,
-            brand=category_model.brand,
-            direction=category_model.direction,
-            business=category_model.business,
-            semantic_hash=SemanticHash(category_model.semantic_hash),
-            keywords_json=set(json_to_set(category_model.keywords_json or "[]")),
-            parent_id=category_model.parent_id,
+            **{
+                field: getattr(category_model, field)
+                for field in category_field_names
+                if hasattr(category_model, field)
+            }
         )
 
+        # Hydrate Constraints dynamically
         constraints = CategoryConstraints(
-            allowed_genders=set(model.allowed_genders or []),
-            allowed_business_types=set(model.allowed_business_types or []),
-            allowed_directions=set(model.allowed_directions or []),
-            allowed_brands=set(model.allowed_brands or []),
-            required_keywords=set(model.required_keywords or []),
+            **{
+                field: set(getattr(model, field) or [])
+                for field in constraints_field_names
+                if hasattr(model, field)
+            }
         )
 
         return CategoryProfile(

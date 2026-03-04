@@ -32,7 +32,7 @@ class CategoryModel(Base):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     level: Mapped[int] = mapped_column(Integer, nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
     url: Mapped[str] = mapped_column(String(255), nullable=False)
 
     brand: Mapped[str | None] = mapped_column(String(100), nullable=True)

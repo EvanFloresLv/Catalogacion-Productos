@@ -324,7 +324,7 @@ def test_load_tree_policy():
         embedding = EmbeddingClient()
         cat_repository = pg.CategoryRepositoryPG(session)
         prof_repository = pg.CategoryProfileRepositoryPG(session)
-        emb_repository = pg.EmbeddingRepositoryPG(session)
+        emb_repository = pg.EmbeddingRepositoryPG(session, expected_dimension=768)
 
         use_case = LoadCategoriesFileUseCase(
             session=session,
