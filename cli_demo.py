@@ -317,7 +317,7 @@ def test_elegibility_policy():
 
 
 def test_load_tree_policy():
-    cmd = LoadCategoriesCommand(file_path="./data/suburbia.xlsx")
+    cmd = LoadCategoriesCommand(file_path="./data/test.xlsx")
 
     with SessionLocal() as session:
 
@@ -327,6 +327,7 @@ def test_load_tree_policy():
         emb_repository = pg.EmbeddingRepositoryPG(session)
 
         use_case = LoadCategoriesFileUseCase(
+            session=session,
             category_repository=cat_repository,
             profiles_repository=prof_repository,
             embedding_repository=emb_repository,

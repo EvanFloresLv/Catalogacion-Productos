@@ -8,7 +8,8 @@ from typing import Optional, TYPE_CHECKING
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import String, ForeignKey, Text, UniqueConstraint, Integer
+from sqlalchemy import String, ForeignKey, Text, UniqueConstraint, Integer, Column
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # ---------------------------------------------------------------------
@@ -39,7 +40,7 @@ class CategoryModel(Base):
     business: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     semantic_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    keywords_json: Mapped[list[str]] = mapped_column(Text, nullable=False)
+    keywords_json = Column(JSONB, nullable=False, default=list)
 
     parent_id: Mapped[str | None] = mapped_column(
         String(36),

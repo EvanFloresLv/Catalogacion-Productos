@@ -187,7 +187,7 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
             direction=category_model.direction,
             business=category_model.business,
             semantic_hash=SemanticHash(category_model.semantic_hash),
-            keywords=set(json_to_set(category_model.keywords_json or "[]")),
+            keywords_json=set(json_to_set(category_model.keywords_json or "[]")),
             parent_id=category_model.parent_id,
         )
 

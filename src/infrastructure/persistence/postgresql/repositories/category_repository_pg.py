@@ -2,7 +2,8 @@
 # Standard library
 # ---------------------------------------------------------------------
 from uuid import UUID
-from typing import Iterable
+from dataclasses import asdict
+import json
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -18,7 +19,7 @@ from domain.entities.categories.category import Category
 from domain.value_objects.semantic_hash import SemanticHash
 from application.ports.category_repository import CategoryRepository
 from infrastructure.persistence.postgresql.models.category_model import CategoryModel
-from utils.json import json_to_set, set_to_json
+from utils.json import json_to_set
 
 
 class CategoryRepositoryPG(CategoryRepository):
@@ -31,90 +32,61 @@ class CategoryRepositoryPG(CategoryRepository):
     # ============================================================
 
     def save(self, category: Category) -> Category:
-        """Upsert single category and return rebuilt entity."""
+        cat_data = self._build_data(category)
 
-        stmt = insert(CategoryModel).values(
-            id=category.id,
-            name=category.name,
-            level=category.level,
-            description=category.description,
-            url=category.url,
-            brand=category.brand,
-            direction=category.direction,
-            business=category.business,
-            semantic_hash=str(category.semantic_hash),
-            keywords_json=set_to_json(category.keywords),
-            parent_id=category.parent_id,
+        stmt = insert(CategoryModel).values(**cat_data)
+
+        update_fields = {
+            column.name: getattr(stmt.excluded, column.name)
+            for column in CategoryModel.__table__.columns
+            if column.name != "id"
+        }
+
+        stmt = (
+            stmt.on_conflict_do_update(
+                index_elements=["id"],
+                set_=update_fields,
+            )
+            .returning(CategoryModel)
         )
 
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["semantic_hash"],
-            set_={
-                "name": stmt.excluded.name,
-                "description": stmt.excluded.description,
-                "keywords_json": stmt.excluded.keywords_json,
-                "parent_id": stmt.excluded.parent_id,
-                "level": stmt.excluded.level,
-                "url": stmt.excluded.url,
-                "brand": stmt.excluded.brand,
-                "direction": stmt.excluded.direction,
-                "business": stmt.excluded.business,
-            },
-        ).returning(CategoryModel)
-
         result = self.session.execute(stmt).scalar_one()
-        self.session.commit()
+
+        # ensure visibility inside transaction
+        self.session.flush()
 
         return self._to_entity(result)
 
     # -------------------------------------------------------------
 
-    def save_batch(
-        self,
-        categories: Iterable[Category],
-        chunk_size: int = 100,
-    ) -> list[Category]:
-        """Batch upsert and return fully reconstructed domain entities."""
-
-        categories = list(categories)
+    def save_batch(self, categories: list[Category]) -> list[Category]:
         if not categories:
             return []
 
-        results: list[Category] = []
+        values = [self._build_data(cat) for cat in categories]
 
-        values = [
-            {
-                "id": c.id,
-                "name": c.name,
-                "description": c.description,
-                "semantic_hash": str(c.semantic_hash),
-                "keywords_json": set_to_json(c.keywords),
-                "parent_id": c.parent_id,
-            }
-            for c in categories
-        ]
+        stmt = insert(CategoryModel).values(values)
 
-        for i in range(0, len(values), chunk_size):
-            batch = values[i : i + chunk_size]
+        update_fields = {
+            column.name: getattr(stmt.excluded, column.name)
+            for column in CategoryModel.__table__.columns
+            if column.name != "id"
+        }
 
-            stmt = insert(CategoryModel).values(batch)
+        stmt = (
+            stmt.on_conflict_do_update(
+                index_elements=["id"],
+                set_=update_fields,
+            )
+            .returning(CategoryModel)
+        )
 
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["semantic_hash"],
-                set_={
-                    "name": stmt.excluded.name,
-                    "description": stmt.excluded.description,
-                    "keywords_json": stmt.excluded.keywords_json,
-                    "parent_id": stmt.excluded.parent_id,
-                },
-            ).returning(CategoryModel)
+        results = self.session.execute(stmt).scalars().all()
 
-            rows = self.session.execute(stmt).scalars().all()
-            results.extend(self._to_entities(rows))
+        # single flush for entire batch
+        self.session.flush()
 
-        self.session.commit()
-
-        return results
+        return [self._to_entity(r) for r in results]
 
     # ============================================================
     # Queries
@@ -122,24 +94,15 @@ class CategoryRepositoryPG(CategoryRepository):
 
     def get_all(self) -> list[Category]:
         stmt = select(CategoryModel)
-
         results = self.session.execute(stmt).scalars().all()
-
         return self._to_entities(results)
 
-    # -------------------------------------------------------------
 
     def get_by_id(self, category_id: UUID) -> Category | None:
         stmt = select(CategoryModel).where(CategoryModel.id == category_id)
-
         result = self.session.execute(stmt).scalar_one_or_none()
+        return self._to_entity(result) if result else None
 
-        if not result:
-            return None
-
-        return self._to_entity(result)
-
-    # -------------------------------------------------------------
 
     def get_by_ids(self, category_ids: list[UUID]) -> list[Category]:
         if not category_ids:
@@ -148,15 +111,20 @@ class CategoryRepositoryPG(CategoryRepository):
         stmt = select(CategoryModel).where(
             CategoryModel.id.in_(category_ids)
         )
-
         results = self.session.execute(stmt).scalars().all()
-
         return self._to_entities(results)
 
+    # ============================================================
+    # Helpers
+    # ============================================================
 
-    # ============================================================
-    # Mapping helpers
-    # ============================================================
+    @staticmethod
+    def _build_data(category: Category) -> dict:
+        data = asdict(category)
+        data["keywords_json"] = list(category.keywords_json)
+
+        return data
+
 
     @staticmethod
     def _to_entity(model: CategoryModel) -> Category:
@@ -170,11 +138,9 @@ class CategoryRepositoryPG(CategoryRepository):
             direction=model.direction,
             business=model.business,
             semantic_hash=SemanticHash(model.semantic_hash),
-            keywords=json_to_set(model.keywords_json),
+            keywords_json=tuple(model.keywords_json),
             parent_id=model.parent_id,
         )
-
-    # -------------------------------------------------------------
 
     def _to_entities(self, models: list[CategoryModel]) -> list[Category]:
         return [self._to_entity(m) for m in models]
