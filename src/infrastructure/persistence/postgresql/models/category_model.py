@@ -2,7 +2,6 @@
 # Standard library
 # ---------------------------------------------------------------------
 from __future__ import annotations
-from uuid import UUID as PyUUID
 from typing import Optional, TYPE_CHECKING
 
 # ---------------------------------------------------------------------
@@ -24,7 +23,7 @@ if TYPE_CHECKING:
 class CategoryModel(Base):
     __tablename__ = "categories"
 
-    id: Mapped[PyUUID] = mapped_column(
+    id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
         nullable=False,
@@ -33,7 +32,7 @@ class CategoryModel(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     level: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
-    url: Mapped[str] = mapped_column(String(255), nullable=False)
+    url: Mapped[str] = mapped_column(String(255), nullable=True)
 
     brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     direction: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -64,5 +63,5 @@ class CategoryModel(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("semantic_hash", name="uq_categories_semantic_hash"),
+        UniqueConstraint("id", "semantic_hash", name="uq_categories_id_semantic_hash"),
     )

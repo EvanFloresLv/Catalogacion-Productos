@@ -85,6 +85,12 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
         if not profiles:
             return []
 
+        unique_profiles = {}
+        for profile in profiles:
+            unique_profiles[profile.category.id] = profile
+
+        profiles = list(unique_profiles.values())
+
         saved_models: list[CategoryProfileModel] = []
 
         for i in range(0, len(profiles), chunk_size):

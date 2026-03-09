@@ -2,32 +2,23 @@
 # Standard library
 # ---------------------------------------------------------------------
 import re
+import json
 import unicodedata
 from typing import List, Dict, Any
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
 from sqlalchemy.orm import Session
 import pandas as pd
-from tqdm import tqdm
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.categories.category import Category
-from domain.entities.categories.category_constraints import CategoryConstraints
-from domain.entities.categories.category_profile import CategoryProfile
-from domain.entities.embeddings.embedding import Embedding
-from domain.value_objects.semantic_hash import SemanticHash
-
 from application.ports.category_repository import CategoryRepository
-from application.ports.category_profile_repository import CategoryProfileRepository
-from application.ports.embedding_repository import EmbeddingRepository
-from application.ports.embedding_service import EmbeddingService
-
-from utils.json import json_to_set
 
 
 # ---------------------------------------------------------------------
@@ -36,61 +27,129 @@ from utils.json import json_to_set
 @dataclass
 class LoadCategoriesCommand:
     file_path: str
+    brand: bool
+    business_types: list[str]
 
 
 # ---------------------------------------------------------------------
 # Use Case
 # ---------------------------------------------------------------------
-class LoadCategoriesFileUseCase:
+class LoadCategoriesUseCase:
+    """
+    Loads categories from an Excel file into the database.
+    Handles parsing, validation, and persistence of category entities.
+    """
+
+    SHEET_WORKERS = 4
 
     def __init__(
         self,
         session: Session,
         category_repository: CategoryRepository,
-        profiles_repository: CategoryProfileRepository,
-        embedding_repository: EmbeddingRepository,
-        embedding_service: EmbeddingService,
     ):
         self.session = session
         self.category_repository = category_repository
-        self.profiles_repository = profiles_repository
-        self.embedding_repository = embedding_repository
-        self.embedding_service = embedding_service
 
     # =============================================================
     # PUBLIC API
     # =============================================================
-    def execute(self, cmd: LoadCategoriesCommand) -> None:
-
+    def execute(self, cmd: LoadCategoriesCommand) -> List[Category]:
+        """
+        Load categories from Excel file and save to database.
+        Returns list of all saved categories.
+        """
         xls = pd.ExcelFile(cmd.file_path)
+        all_categories = []
 
-        for sheet_name in xls.sheet_names:
-            print(f"\nProcessing sheet: {sheet_name}")
+        parsed_results = []
 
-            df = self._prepare_dataframe(xls, sheet_name)
+        # -----------------------------
+        # Stage 1 — Parallel sheet parsing
+        # -----------------------------
+        with ThreadPoolExecutor(max_workers=self.SHEET_WORKERS) as executor:
+            futures = {
+                executor.submit(self._process_sheet, xls, sheet, cmd.brand): sheet
+                for sheet in xls.sheet_names
+            }
 
-            if df is None:
+            for future in as_completed(futures):
+                sheet_name = futures[future]
+                try:
+                    parsed_results.append((sheet_name, future.result()))
+                except Exception as e:
+                    print(f"Error processing sheet {sheet_name}: {e}")
+
+        # -----------------------------
+        # Stage 2 — Sequential commit
+        # -----------------------------
+        for sheet_name, categories in parsed_results:
+
+            if not categories:
                 continue
 
-            categories, embeddings, profiles = self._process_sheet(df)
+            print(f"Sheet: {sheet_name} | {len(categories)} categories")
 
             self._validate_parent_integrity(categories)
+            categories = self._deduplicate_categories(categories)
 
-            self._commit_sheet(
-                sheet_name,
-                categories,
-                embeddings,
-                profiles,
-            )
+            saved = self._commit_sheet(sheet_name, categories)
+            all_categories.extend(saved)
+
+        print(f"\n\nTotal categories loaded: {len(all_categories)}")
+
+        return all_categories
 
     # =============================================================
-    # PREPARATION
+    # SHEET PROCESSING
+    # =============================================================
+    def _process_sheet(
+        self,
+        xls: pd.ExcelFile,
+        sheet_name: str,
+        brand: bool
+    ) -> List[Category]:
+        """Process a single sheet and return parsed categories."""
+
+        print(f"Processing sheet: {sheet_name}")
+
+        df = self._prepare_dataframe(xls, sheet_name)
+        if df is None:
+            return []
+
+        categories: List[Category] = []
+        last_inserted: Dict[int, str] = {}
+
+        for _, row in df.iterrows():
+
+            row_dict = self._clean_row(row)
+            if not row_dict:
+                continue
+
+            category = self._parse_row(
+                row_dict,
+                last_inserted,
+                sheet_name if brand else None
+            )
+            if not category:
+                continue
+
+            categories.append(category)
+
+        categories.sort(key=lambda c: (c.level, c.parent_id or ""))
+
+        print(f"Prepared {len(categories)} categories for {sheet_name}")
+
+        return categories
+
+    # =============================================================
+    # DATAFRAME PREPARATION
     # =============================================================
     def _prepare_dataframe(
         self,
         xls: pd.ExcelFile,
         sheet_name: str,
     ) -> pd.DataFrame | None:
+        """Prepare and validate DataFrame from Excel sheet."""
 
         df = pd.read_excel(xls, sheet_name=sheet_name)
 
@@ -101,8 +160,8 @@ class LoadCategoriesFileUseCase:
         df.columns = df.columns.map(lambda x: str(x).strip())
 
         lower_cols = [c.lower() for c in df.columns]
-        if "catid" not in lower_cols:
-            print(f"Skipping sheet {sheet_name} (no 'catid').")
+        if not all(col in lower_cols for col in ["catid", "url"]):
+            print(f"Skipping sheet {sheet_name} (no 'catid' or 'url').")
             return None
 
         cat_id_index = lower_cols.index("catid")
@@ -116,47 +175,10 @@ class LoadCategoriesFileUseCase:
         return df
 
     # =============================================================
-    # SHEET PROCESSING
-    # =============================================================
-    def _process_sheet(
-        self,
-        df: pd.DataFrame,
-    ) -> tuple[List[Category], List[Embedding], List[CategoryProfile]]:
-
-        categories: List[Category] = []
-        embeddings: List[Embedding] = []
-        profiles: List[CategoryProfile] = []
-
-        last_inserted: Dict[int, str] = {}
-
-        for _, row in tqdm(
-            df.iterrows(),
-            total=df.shape[0],
-            desc="Processing rows",
-        ):
-            row_dict = self._clean_row(row)
-            if not row_dict:
-                continue
-
-            parsed = self._parse_row(row_dict, last_inserted)
-            if not parsed:
-                continue
-
-            category, embedding, profile = parsed
-
-            categories.append(category)
-            embeddings.append(embedding)
-            profiles.append(profile)
-
-        categories.sort(key=lambda c: (c.level, c.parent_id or ""))
-
-        print(f"Prepared {len(categories)} categories.")
-        return categories, embeddings, profiles
-
-    # =============================================================
     # ROW PARSING
     # =============================================================
     def _clean_row(self, row: pd.Series) -> Dict[str, Any]:
+        """Clean and normalize row data."""
         return {
             str(k).strip(): v
             for k, v in row.to_dict().items()
@@ -167,7 +189,9 @@ class LoadCategoriesFileUseCase:
         self,
         row_dict: Dict[str, Any],
         last_inserted: Dict[int, str],
-    ) -> tuple[Category, Embedding, CategoryProfile] | None:
+        brand: str | None
+    ) -> Category | None:
+        """Parse a single row into a Category entity."""
 
         level_key = self._find_key(row_dict, "level")
         id_key = self._find_key(row_dict, "catid")
@@ -189,8 +213,9 @@ class LoadCategoriesFileUseCase:
         last_inserted[level] = cat_id
 
         titulo = self._clean_text(row_dict.get(
-            self._find_key(row_dict, "titulo") or "", ""
+            self._find_key(row_dict, "meta") or "", ""
         ))
+
         descripcion = self._clean_text(row_dict.get(
             self._find_key(row_dict, "descripcion") or "", ""
         ))
@@ -203,33 +228,20 @@ class LoadCategoriesFileUseCase:
             parent_id=parent_id,
             name=name,
             level=level,
+            brand=brand,
             description=descripcion,
             url=row_dict.get(self._find_key(row_dict, "url")),
-            keywords_json=json_to_set(keywords),
+            keywords_json=tuple(keywords)
         )
 
-        embedding_text = category.to_embedding_text()
-
-        embedding = Embedding.create(
-            category_id=cat_id,
-            vector=self.embedding_service.generate(embedding_text),
-            content_hash=SemanticHash.from_text(
-                embedding_text
-            ).value,
-        )
-
-        profile = CategoryProfile.create(
-            category=category,
-            constraints=CategoryConstraints(),
-        )
-
-        return category, embedding, profile
+        return category
 
     # =============================================================
     # HELPERS
     # =============================================================
     @staticmethod
     def _find_key(data: Dict[str, Any], keyword: str) -> str | None:
+        """Find a key in dictionary by keyword (case-insensitive)."""
         return next(
             (k for k in data.keys() if keyword in k.lower()),
             None,
@@ -237,11 +249,13 @@ class LoadCategoriesFileUseCase:
 
     @staticmethod
     def _extract_level(key: str) -> int | None:
+        """Extract level number from key string."""
         match = re.search(r"\d+", key)
         return int(match.group()) if match else None
 
     @staticmethod
     def _clean_text(text: Any) -> str:
+        """Clean and normalize text content."""
         text = unicodedata.normalize("NFKD", str(text))
         text = re.sub(r"http\S+|www\S+|https\S+", "", text)
         text = re.sub(r"\S*\.com\S*", "", text)
@@ -254,26 +268,31 @@ class LoadCategoriesFileUseCase:
         descripcion: str,
         palabras: Any,
     ) -> List[str]:
+        """Extract and normalize keywords from various sources."""
 
+        pattern = r"[A-Za-zÁÉÍÓÚáéíóúÑñ]+"
+        extracted = []
+
+        # Parse palabras (can be JSON string, list, etc.)
         if isinstance(palabras, str):
-            palabras = palabras.split(",")
+            try:
+                palabras = json.loads(palabras)
+            except Exception:
+                palabras = [palabras]
 
-        palabras = palabras or []
+        if isinstance(palabras, (list, tuple, set)):
+            for p in palabras:
+                if isinstance(p, str):
+                    extracted.extend(re.findall(pattern, p.lower()))
 
-        all_words = (
-            palabras
-            + titulo.lower().split()
-            + descripcion.lower().split()
-        )
+        extracted.extend(re.findall(pattern, titulo.lower()))
+        extracted.extend(re.findall(pattern, descripcion.lower()))
 
-        return list({
-            w.strip()
-            for w in all_words
-            if isinstance(w, str) and w.strip()
-        })
+        return list(dict.fromkeys(extracted))
 
     @staticmethod
     def _validate_parent_integrity(categories: List[Category]) -> None:
+        """Validate that all parent categories exist in the list."""
         ids_set = {c.id for c in categories}
 
         for cat in categories:
@@ -283,6 +302,16 @@ class LoadCategoriesFileUseCase:
                     f"for category {cat.id}"
                 )
 
+    @staticmethod
+    def _deduplicate_categories(
+        categories: List[Category],
+    ) -> List[Category]:
+        """Remove duplicate categories by ID."""
+        unique = {}
+        for c in categories:
+            unique[c.id] = c
+        return list(unique.values())
+
     # =============================================================
     # TRANSACTION
     # =============================================================
@@ -290,19 +319,16 @@ class LoadCategoriesFileUseCase:
         self,
         sheet_name: str,
         categories: List[Category],
-        embeddings: List[Embedding],
-        profiles: List[CategoryProfile],
-    ) -> None:
+    ) -> List[Category]:
+        """Save categories to database within a transaction."""
 
         try:
-            self.category_repository.save_batch(categories)
-            self.embedding_repository.save_batch(embeddings)
-            self.profiles_repository.save_batch(profiles)
-
+            saved = self.category_repository.save_batch(categories)
             self.session.commit()
-            print(f"Sheet {sheet_name} committed successfully.")
+            print(f"✓ Sheet {sheet_name}: {len(saved)} categories saved")
+            return saved
 
         except Exception as e:
             self.session.rollback()
-            print(f"Rollback sheet {sheet_name}: {e}")
+            print(f"✗ Rollback sheet {sheet_name}: {e}")
             raise

@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------
 import time
 import hashlib
+import threading
 from typing import List, Sequence
 
 # ---------------------------------------------------------------------
@@ -25,7 +26,7 @@ from utils.retry import sync_exponential_backoff_retry_sync
 
 
 # ================================================================
-# Embedding Client (SYNC)
+# Embedding Client (SYNC, PARALLEL SAFE)
 # ================================================================
 
 class EmbeddingClient(EmbeddingService):
@@ -42,7 +43,8 @@ class EmbeddingClient(EmbeddingService):
         self.embedding_dim = embedding_dim
         self.enable_fallback = enable_fallback
 
-        self.circuit_breaker = CircuitBreaker()
+        self._breaker = CircuitBreaker()
+        self._lock = threading.Lock()  # protect breaker updates
 
         self._client = genai.Client(
             vertexai=True,
@@ -62,16 +64,18 @@ class EmbeddingClient(EmbeddingService):
         return [float(x) for x in expanded]
 
     # ============================================================
-    # Core API Call (SYNC)
+    # Core API Call
     # ============================================================
 
     def _embed_batch(self, texts: Sequence[str]) -> List[List[float]]:
 
-        if self.circuit_breaker.is_open():
-            raise PermanentEmbeddingError("Circuit breaker open")
-
         if not texts:
             raise ValueError("texts must not be empty")
+
+        if self._breaker.is_open():
+            if self.enable_fallback:
+                return [self._fallback_embedding(t) for t in texts]
+            raise PermanentEmbeddingError("Circuit breaker open")
 
         def do_request():
             try:
@@ -121,8 +125,8 @@ class EmbeddingClient(EmbeddingService):
         return sync_exponential_backoff_retry_sync(
             do_request,
             attempts=self.retry_attempts,
-            base_delay=0.3,
-            max_delay=3.0,
+            base_delay=0.4,
+            max_delay=4.0,
             retry_on=(TransientEmbeddingError,),
         )
 
@@ -131,25 +135,8 @@ class EmbeddingClient(EmbeddingService):
     # ============================================================
 
     def generate(self, text: str) -> List[float]:
-
-        if self.enable_fallback:
-            return self._fallback_embedding(text)
-
-        start = time.monotonic()
-
-        try:
-            result = self._embed_batch([text])
-            self.circuit_breaker.record_success()
-            return result[0]
-
-        except Exception:
-            self.circuit_breaker.record_failure()
-            raise
-
-        finally:
-            latency = time.monotonic() - start
-            # optionally log latency here
-
+        result = self.generate_batch([text])
+        return result[0]
 
     def generate_batch(self, texts: Sequence[str]) -> List[List[float]]:
 
@@ -160,17 +147,26 @@ class EmbeddingClient(EmbeddingService):
 
         try:
             result = self._embed_batch(texts)
-            self.circuit_breaker.record_success()
+
+            # Record success only once per batch
+            with self._lock:
+                self._breaker.record_success()
+
             return result
 
-        except Exception:
-            self.circuit_breaker.record_failure()
+        except TransientEmbeddingError:
+            # DO NOT open circuit for transient errors
+            raise
+
+        except PermanentEmbeddingError:
+            # Permanent errors open circuit
+            with self._lock:
+                self._breaker.record_failure()
             raise
 
         finally:
             latency = time.monotonic() - start
             # optionally log latency here
-
 
     def close(self) -> None:
         if hasattr(self._client, "close"):

@@ -2,7 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 # ---------------------------------------------------------------------
@@ -42,6 +42,13 @@ class EmbeddingRepository(ABC):
     def get_by_category_ids(
         self, category_ids: list[UUID]
     ) -> list[Embedding]:
+        raise NotImplementedError
+
+
+    @abstractmethod
+    def find_by_hashes(
+        self, hashes: List[str]
+    ) -> List[Embedding]:
         raise NotImplementedError
 
 

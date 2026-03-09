@@ -27,7 +27,7 @@ class CategoryProfile:
         cls,
         category: Category,
         constraints: CategoryConstraints,
-    ) -> "CategoryProfile":
+    ) -> CategoryProfile:
 
         if not isinstance(category, Category):
             raise TypeError("category must be a Category instance")

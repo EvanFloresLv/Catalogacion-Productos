@@ -38,7 +38,7 @@ class CategoryRepositoryPG(CategoryRepository):
 
         stmt = (
             stmt.on_conflict_do_update(
-                index_elements=["id"],
+                constraint=["uq_categories_id_semantic_hash"],
                 set_=self._build_update_map(stmt),
             )
             .returning(CategoryModel)
@@ -62,7 +62,7 @@ class CategoryRepositoryPG(CategoryRepository):
 
         stmt = (
             stmt.on_conflict_do_update(
-                index_elements=["id"],
+                constraint="uq_categories_id_semantic_hash",
                 set_=self._build_update_map(stmt),
             )
             .returning(CategoryModel)

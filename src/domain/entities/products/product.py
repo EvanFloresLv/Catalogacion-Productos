@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from uuid import UUID, uuid4
+from typing import Tuple
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -52,6 +53,21 @@ class Product:
         )
 
 
+    @staticmethod
+    def _build_embedding_text(
+        name: str,
+        description: str,
+        keywords: Tuple[str, ...],
+    ) -> str:
+        return (
+            f"TÍTULO: {name}\n"
+            f"DESCRIPCIÓN: {description}\n"
+            f"PALABRAS CLAVE: {', '.join(keywords)}"
+        )
+
     def to_embedding_text(self) -> str:
-        keywords = ", ".join(self.keywords)
-        return f"TÍTULO: {self.title}\nDESCRIPCIÓN: {self.description}\nPALABRAS CLAVE: {keywords}"
+        return self._build_embedding_text(
+            name=self.title,
+            description=self.description or "",
+            keywords=tuple(self.keywords)
+        )

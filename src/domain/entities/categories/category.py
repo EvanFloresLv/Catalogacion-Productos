@@ -31,7 +31,7 @@ def _normalize_text(value: str | None) -> str:
 
 def _normalize_keywords(values: Iterable[str] | None) -> Tuple[str, ...]:
     if not values:
-        return None
+        return ()  # Return empty tuple instead of None
 
     normalized = {
         _normalize_text(v).lower()
@@ -39,8 +39,7 @@ def _normalize_keywords(values: Iterable[str] | None) -> Tuple[str, ...]:
         if isinstance(v, str) and v.strip()
     }
 
-    return tuple(sorted(normalized))
-
+    return tuple(sorted(normalized)) if normalized else ()
 
 # -------------------------------------------------------------
 # Entity
@@ -171,8 +170,8 @@ class Category:
     def to_embedding_text(self) -> str:
         return self._build_embedding_text(
             self.name,
-            self.description,
-            self.keywords_json,
+            self.description or "",
+            self.keywords_json or (),
         )
 
 

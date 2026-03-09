@@ -1,7 +1,5 @@
 from infrastructure.embeddings.gemini.client import EmbeddingClient
 
-from application.use_cases.categories.load_file import LoadCategoriesFileUseCase, LoadCategoriesCommand
-
 import domain as dom
 import application as app
 import infrastructure.persistence.postgresql as pg
@@ -9,6 +7,10 @@ from domain.specifications.eligibility_policy import CategoryEligibilityPolicy
 
 from infrastructure.persistence.postgresql.session import SessionLocal
 
+from application.use_cases.categories.load_categories_from_file import (
+    LoadCategoriesFromFileUseCase,
+    LoadCategoriesFromFileCommand,
+)
 
 def test_embedding_generation():
 
@@ -317,7 +319,11 @@ def test_elegibility_policy():
 
 
 def test_load_tree_policy():
-    cmd = LoadCategoriesCommand(file_path="./data/test.xlsx")
+    cmd = LoadCategoriesFromFileCommand(
+        file_path="./data/suburbia.xlsx",
+        brand=True,
+        business_types=["Liverpool"]
+    )
 
     with SessionLocal() as session:
 
@@ -326,7 +332,7 @@ def test_load_tree_policy():
         prof_repository = pg.CategoryProfileRepositoryPG(session)
         emb_repository = pg.EmbeddingRepositoryPG(session, expected_dimension=768)
 
-        use_case = LoadCategoriesFileUseCase(
+        use_case = LoadCategoriesFromFileUseCase(
             session=session,
             category_repository=cat_repository,
             profiles_repository=prof_repository,
@@ -337,6 +343,35 @@ def test_load_tree_policy():
         use_case.execute(cmd)
 
 
+def test():
+
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+
+    DATABASE_URL = "postgresql+psycopg://postgres:admin@localhost:5432/product_routing"
+
+    engine = create_engine(DATABASE_URL, echo=False)
+
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=True,
+        bind=engine
+    )
+
+    with SessionLocal() as session:
+
+        stmt = session.execute(
+            text("""
+                SELECT * FROM categories
+
+            """)
+        )
+
+        missing_ids = stmt.fetchall()
+
+        print("Result size:", len(missing_ids))
+
+
 if __name__ == "__main__":
     # test_embedding_generation()
     # test_hashing()
@@ -344,3 +379,4 @@ if __name__ == "__main__":
     # test_constraints()
     # test_elegibility_policy()
     test_load_tree_policy()
+    # test()

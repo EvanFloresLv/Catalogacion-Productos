@@ -46,7 +46,7 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         stmt = insert(EmbeddingModel).values(**row)
 
         stmt = stmt.on_conflict_do_update(
-            index_elements=["category_id", "content_hash"],
+            constraint="uq_embeddings_category_hash",
             set_={
                 "vector": stmt.excluded.vector,
                 "dimension": stmt.excluded.dimension,
@@ -65,12 +65,22 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         for i in range(0, len(embeddings), self.batch_size):
             chunk = embeddings[i : i + self.batch_size]
 
-            rows = [self._build_row(e) for e in chunk]
+            # ------------------------------------------
+            # Defensive deduplication (CRITICAL)
+            # ------------------------------------------
+            unique = {}
+            for e in chunk:
+                key = (e.category_id, e.content_hash)
+                unique[key] = e
+
+            deduped_chunk = list(unique.values())
+
+            rows = [self._build_row(e) for e in deduped_chunk]
 
             stmt = insert(EmbeddingModel).values(rows)
 
             stmt = stmt.on_conflict_do_update(
-                index_elements=["category_id", "content_hash"],
+                constraint="uq_embeddings_category_hash",
                 set_={
                     "vector": stmt.excluded.vector,
                     "dimension": stmt.excluded.dimension,
@@ -107,6 +117,29 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
         results = self.session.execute(stmt).scalars().all()
 
         return [self._to_entity(r) for r in results]
+
+    # -------------------------------------------------------------
+
+    def find_by_hashes(self, hashes: List[str]) -> List[Embedding]:
+
+        if not hashes:
+            return []
+
+        stmt = (
+            select(EmbeddingModel)
+            .where(EmbeddingModel.content_hash.in_(hashes))
+        )
+
+        rows = self.session.execute(stmt).scalars().all()
+
+        return [
+            Embedding(
+                category_id=row.category_id,
+                vector=row.vector,
+                content_hash=row.content_hash,
+            )
+            for row in rows
+        ]
 
     # ============================================================
     # Semantic Search
@@ -161,25 +194,24 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
 
     @staticmethod
     def _build_row(embedding: Embedding) -> dict:
-        """
-        Build dynamic insert row from Embedding entity.
-        Avoids hardcoding attribute names.
-        """
+        vector = embedding.vector
 
-        row = {}
+        # Properly check for None or empty vector
+        if vector is None:
+            raise ValueError(f"Vector is None for embedding {embedding.category_id}")
 
-        for field in fields(embedding):
-            row[field.name] = getattr(embedding, field.name)
+        # Convert numpy array to list if needed
+        vector_list = vector.tolist() if hasattr(vector, 'tolist') else list(vector)
 
-        # Ensure dimension consistency
-        vector = row.get("vector")
+        if not vector_list:
+            raise ValueError(f"Empty vector for embedding {embedding.category_id}")
 
-        if not vector:
-            raise ValueError("Embedding vector cannot be empty")
-
-        row["dimension"] = len(vector)
-
-        return row
+        return {
+            "category_id": embedding.category_id,
+            "vector": vector_list,
+            "content_hash": embedding.content_hash,
+            "dimension": len(vector_list),
+        }
 
     # -------------------------------------------------------------
 

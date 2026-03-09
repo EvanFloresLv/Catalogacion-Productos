@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------
 # Standard libraries
 # ---------------------------------------------------------------------
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 
 # ---------------------------------------------------------------------
@@ -31,7 +31,8 @@ class EmbeddingModel(Base):
 
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
-        primary_key=True
+        primary_key=True,
+        default=uuid4,
     )
 
     category_id: Mapped[str] = mapped_column(
