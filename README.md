@@ -1,2 +1,0 @@
-# ia_enrutamiento_automatico
-ia_enrutamiento_automatico

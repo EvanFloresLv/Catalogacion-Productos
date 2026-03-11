@@ -68,12 +68,11 @@ prompt_generate_attributes:
           type: string
           description: Nombre de la hoja de cálculo.
         direccion:
-          enum: ["mujer", "hombre", "niños y niñas", "bebés", "juguetes", "zapatos", "relojes, lentes y joyería", "electrónica", "línea blanca y electrodomésticos", "hogar", "muebles", "motos y autos", "deportes", "salud y belleza", "videojuegos", "vinos y gourmet", "libros y papelería", "mascotas"]
           type: string
           description: Categoría o temática principal del contenido (ej. tecnología, moda, deportes). Usa 'Nulo' si no se puede determinar.
         genero:
           type: string
-          enum: ["hombre", "mujer", "unisex", "Nulo"]
+          enum: [hombre, mujer, unisex, genérico]
           description: Género predominante sugerido por las palabras clave (masculino, femenino, neutral). Usa 'Nulo' si no hay evidencia suficiente.
       required:
         - sheet_name

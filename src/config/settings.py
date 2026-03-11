@@ -9,21 +9,17 @@ import logging
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from google.auth import default
 
 # ---------------------------------------------------------------------
-# Settings
+# Internal application imports
 # ---------------------------------------------------------------------
 
 
-class LLMSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_prefix="LLM_",
-        extra="ignore",
-    )
-
+class LLMSettings(BaseModel):
     provider: str = "gemini"
 
-    model: str = ""
+    model: str = "gemini-2.5-flash"  # Default model
     model_fast: str = "gemini-2.5-flash"
     model_pro: str = "gemini-2.5-pro"
 
@@ -39,16 +35,14 @@ class GoogleCredentials(BaseModel):
 
     @classmethod
     def from_default(cls):
-        try:
-            from google.auth import default
-            credentials, project_id = default()
-            return cls(credentials=credentials, project_id=project_id)
-        except Exception:
-            return cls()
+        credentials, project_id = default()
+        return cls(credentials=credentials, project_id=project_id)
 
 
 class GeminiGenerationSettings(BaseSettings):
     model_config = SettingsConfigDict(
+        env_nested_delimiter="_",
+        env_nested_max_split=2,
         env_prefix="LLM_",
         extra="ignore",
     )
@@ -61,12 +55,14 @@ class GeminiGenerationSettings(BaseSettings):
 
 class LoggingSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="LOGS_",
+        env_nested_delimiter="_",
+        env_nested_max_split=2,
+        env_prefix="LOGGING_",
         extra="ignore",
     )
 
     directory: str = "logs"
-    name: str = "ProductRouting"
+    name: str = "app"
     level: str = "INFO"
 
     module_levels: dict[str, str] = {
@@ -98,10 +94,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "ProductRouting"
+    app_name: str = "course-notes-ai"
     environment: str = "local"
 
-    database_url: str = "postgresql+psycopg://postgres:admin@localhost:5432/product_routing"
+    # DB
+    database_url: str = "sqlite:///./app.db"
 
 
 settings = Settings()
