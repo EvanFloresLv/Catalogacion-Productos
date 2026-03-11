@@ -3,8 +3,8 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields
-from typing import Any, Iterable, Tuple
+from dataclasses import dataclass, fields
+from typing import Any
 
 # ---------------------------------------------------------------------
 # Third-party libraries

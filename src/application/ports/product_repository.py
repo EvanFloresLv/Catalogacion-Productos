@@ -35,20 +35,20 @@ class ProductRepository(ABC):
 
 
     @abstractmethod
-    def get_by_id(
+    def get_by_sku(
         self,
-        product_id: UUID
+        sku: str
     ) -> Product | None:
-        """Retrieves a product by its ID from the repository."""
+        """Retrieves a product by its SKU from the repository."""
         raise NotImplementedError
 
 
     @abstractmethod
-    def get_by_ids(
+    def get_by_skus(
         self,
-        product_ids: list[UUID]
+        skus: list[str]
     ) -> list[Product | None]:
-        """Retrieves products by their IDs from the repository."""
+        """Retrieves products by their SKUs from the repository."""
         raise NotImplementedError
 
 

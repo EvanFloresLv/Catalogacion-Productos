@@ -1,13 +1,12 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
-from uuid import UUID as PyUUID
 
 # ---------------------------------------------------------------------
 # Third-party libraries
-from sqlalchemy import String, Text
+# ---------------------------------------------------------------------
+from sqlalchemy import String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID
 
 # ---------------------------------------------------------------------
 # Internal application imports
@@ -18,11 +17,15 @@ from infrastructure.persistence.postgresql.base import Base
 class ProductModel(Base):
     __tablename__ = "products"
 
-    id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), primary_key=True, nullable=False)
+    sku: Mapped[str] = mapped_column(String(50), nullable=False, primary_key=True)
 
-    title: Mapped[str] = mapped_column(String(100), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    keywords_json: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    business: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    keywords: Mapped[str] = mapped_column(Text, nullable=False)
 
     gender: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    business_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    product_type: Mapped[str | None] = mapped_column(String(50), nullable=False)

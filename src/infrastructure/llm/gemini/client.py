@@ -64,7 +64,7 @@ class LLMClient(LLMService):
             max_tokens: Maximum tokens in response
             enable_fallback: Enable model fallback on failure
         """
-        self.model = model or gemini_settings.llm.model or self.DEFAULT_MODEL
+        self.model = model or gemini_settings.llm.model_fast or self.DEFAULT_MODEL
         self.timeout_seconds = timeout_seconds
         self.retry_attempts = retry_attempts
         self.temperature = temperature or self.DEFAULT_TEMPERATURE

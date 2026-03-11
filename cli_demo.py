@@ -14,6 +14,11 @@ from application.use_cases.categories.load_categories_from_file import (
     LoadCategoriesFromFileCommand,
 )
 
+from application.use_cases.products.create_product import (
+    CreateProductUseCase,
+    CreateProductCommand
+)
+
 def test_embedding_generation():
 
     embedding = EmbeddingClient()
@@ -351,35 +356,55 @@ def test_load_tree_policy():
         use_case.execute(cmd)
 
 
-def test():
+def test_create_product():
 
-    from sqlalchemy import create_engine, text
-    from sqlalchemy.orm import sessionmaker
-
-    DATABASE_URL = "postgresql+psycopg://postgres:admin@localhost:5432/product_routing"
-
-    engine = create_engine(DATABASE_URL, echo=False)
-
-    SessionLocal = sessionmaker(
-        autocommit=False,
-        autoflush=True,
-        bind=engine
+    products = [
+        {
+            "sku": "00-00-00",
+            "name": "Test Product Name",
+            "business": "liverpool",
+            "description": "Product for testing.",
+            "keywords": ["test", "product"],
+            "product_type": "marketplace",
+            "gender": "unisex",
+            "brand": "Test Brand",
+            "direction": "muebles"
+        },
+        {
+            "sku": "00-00-01",
+            "name": "Test Product Name 2",
+            "business": "liverpool",
+            "description": "Product for testing 2.",
+            "keywords": ["test", "product"],
+            "product_type": "marketplace",
+            "gender": "unisex",
+            "brand": "Test Brand",
+            "direction": "muebles"
+        }
+    ]
+    cmd = CreateProductCommand(
+        products=products
     )
 
     with SessionLocal() as session:
 
-        stmt = session.execute(
-            text("""
-                SELECT * FROM category_profiles
-            """)
-        )
+        product_repository = pg.ProductRepositoryPG(session)
 
-        result = stmt.fetchall()
+        products = CreateProductUseCase(
+            products=product_repository
+        ).execute(cmd)
 
-        for row in result:
-            print(row)
-
-        print("Result size:", len(result))
+        print("Product created:")
+        for product in products:
+            print("="*30)
+            print(f" - SKU: {product.sku}")
+            print(f" - Name: {product.name}")
+            print(f" - Description: {product.description}")
+            print(f" - Keywords: {product.keywords}")
+            print(f" - Gender: {product.gender}")
+            print(f" - Brand: {product.brand}")
+            print(f" - Business: {product.business}")
+            print(f" - Direction: {product.direction}")
 
 
 if __name__ == "__main__":
@@ -388,5 +413,5 @@ if __name__ == "__main__":
     # test_unique_hashes()
     # test_constraints()
     # test_elegibility_policy()
-    test_load_tree_policy()
-    # test()
+    # test_load_tree_policy()
+    test_create_product()

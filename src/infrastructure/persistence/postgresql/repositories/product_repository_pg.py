@@ -2,6 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 from uuid import UUID
+from dataclasses import fields
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -28,25 +29,29 @@ class ProductRepositoryPG(ProductRepository):
     # Single upsert
     # ---------------------------------
     def save(self, product: Product) -> None:
+        """
+        Save or update a product.
 
-        stmt = insert(ProductModel).values(
-            id=product.id,
-            title=product.title,
-            description=product.description,
-            keywords_json=set_to_json(product.keywords),
-            gender=product.gender,
-            business_type=product.business_type,
-        )
+        On conflict (sku)
+        - Updates all fields except sku
+        """
+        values = {
+            field.name: getattr(product, field.name)
+            for field in fields(Product)
+        }
+
+        stmt = insert(ProductModel).values(**values)
+
+        # Build update dict excluding sku and composite key fields
+        update_fields = {
+            field.name: getattr(stmt.excluded, field.name)
+            for field in fields(Product)
+            if field.name not in ["sku"]
+        }
 
         stmt = stmt.on_conflict_do_update(
-            index_elements=["id"],
-            set_={
-                "title": stmt.excluded.title,
-                "description": stmt.excluded.description,
-                "keywords_json": stmt.excluded.keywords_json,
-                "gender": stmt.excluded.gender,
-                "business_type": stmt.excluded.business_type,
-            },
+            index_elements=["sku"],
+            set_=update_fields,
         )
 
         self.session.execute(stmt)
@@ -56,33 +61,35 @@ class ProductRepositoryPG(ProductRepository):
     # Batch upsert
     # ---------------------------------
     def save_batch(self, products: list[Product]) -> None:
+        """
+        Save or update multiple products in a batch.
 
+        On conflict (sku):
+        - Updates all fields except sku
+        """
         if not products:
             return
 
         values = [
             {
-                "id": p.id,
-                "title": p.title,
-                "description": p.description,
-                "keywords_json": set_to_json(p.keywords),
-                "gender": p.gender,
-                "business_type": p.business_type,
+                field.name: getattr(p, field.name)
+                for field in fields(Product)
             }
             for p in products
         ]
 
         stmt = insert(ProductModel).values(values)
 
+        # Build update dict excluding sku and composite key fields
+        update_fields = {
+            field.name: getattr(stmt.excluded, field.name)
+            for field in fields(Product)
+            if field.name not in ["sku"]
+        }
+
         stmt = stmt.on_conflict_do_update(
-            index_elements=["id"],
-            set_={
-                "title": stmt.excluded.title,
-                "description": stmt.excluded.description,
-                "keywords_json": stmt.excluded.keywords_json,
-                "gender": stmt.excluded.gender,
-                "business_type": stmt.excluded.business_type,
-            },
+            index_elements=["sku"],
+            set_=update_fields,
         )
 
         self.session.execute(stmt)
@@ -91,10 +98,10 @@ class ProductRepositoryPG(ProductRepository):
     # ---------------------------------
     # Get single
     # ---------------------------------
-    def get_by_id(self, product_id: UUID) -> Product | None:
+    def get_by_sku(self, sku: str) -> Product | None:
 
         stmt = select(ProductModel).where(
-            ProductModel.id == product_id
+            ProductModel.sku == sku
         )
 
         result = self.session.execute(stmt).scalars().first()
@@ -107,14 +114,14 @@ class ProductRepositoryPG(ProductRepository):
     # ---------------------------------
     # Get multiple
     # ---------------------------------
-    def get_by_ids(self, product_ids: list[UUID]) -> list[Product]:
+    def get_by_skus(self, skus: list[str]) -> list[Product]:
 
-        if not product_ids:
+        if not skus:
             return []
 
 
         stmt = select(ProductModel).where(
-            ProductModel.id.in_(product_ids)
+            ProductModel.sku.in_(skus)
         )
 
         results = self.session.execute(stmt).scalars().all()
@@ -137,12 +144,15 @@ class ProductRepositoryPG(ProductRepository):
     # ---------------------------------
     @staticmethod
     def _to_entity(model: ProductModel) -> Product:
+        """
+        Convert ProductModel to Product entity.
 
-        return Product(
-            id=model.id,
-            title=model.title,
-            description=model.description,
-            keywords=json_to_set(model.keywords_json),
-            gender=model.gender,
-            business_type=model.business_type,
-        )
+        Maps all fields from the model to the entity,
+        handling keywords_json properly.
+        """
+        values = {
+            field.name: getattr(model, field.name)
+            for field in fields(Product)
+        }
+
+        return Product(**values)

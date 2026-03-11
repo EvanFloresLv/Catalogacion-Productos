@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from domain.entities.categories.category import Category
 from domain.entities.categories.category_constraints import CategoryConstraints
 from domain.entities.categories.category_profile import CategoryProfile
+from domain.specifications.brand_business_policy import BrandBusinessPolicy
 from application.ports.category_profile_repository import CategoryProfileRepository
 
 
@@ -128,21 +129,44 @@ class LoadCategoryProfilesUseCase:
         Priority order:
         1. If global_business is set -> apply to all profiles
         2. If is_brand_mode is True -> use category.brand (from sheet name)
+           AND apply brand business policy to set allowed businesses
         3. Otherwise -> use LLM metadata (direccion -> business, genero -> gender)
         """
+
+        # Initialize all constraint fields to None
+        gender = None
+        direccion = None
+        business = None
+        brand = None
 
         # Priority 1: Global business applies to all
         if global_business:
             print(f"  Business mode: {category.name} (business: {global_business})")
-            constraints = CategoryConstraints.create(
-                business=global_business
-            )
+            business = str(global_business).lower().strip()
+
         # Priority 2: Brand mode (categories already have brand from sheet name)
+        # Apply brand business policy to determine allowed businesses
         if is_brand_mode:
-            print(f"  Brand mode: {category.name} (brand: {sheet_name})")
-            constraints = CategoryConstraints.create(
-                brand=sheet_name
+            brand = str(sheet_name).strip()  # Keep original case for brand
+
+            # Check if brand is in Liverpool exclusion list
+            is_excluded_from_liverpool = BrandBusinessPolicy.is_brand_excluded_from_business(
+                brand, "liverpool"
             )
+
+            if is_excluded_from_liverpool:
+                # Brand excluded from Liverpool → can only be in Suburbia
+                business = "suburbia"
+                print(f"  Brand mode: {category.name} (brand: {brand}, business: suburbia [Liverpool excluded])")
+            else:
+                # Brand allowed in Liverpool → set to Liverpool only
+                business = "liverpool"
+                print(f"  Brand mode: {category.name} (brand: {brand}, business: liverpool)")
+        elif is_brand_mode is False and brand:
+            # If brand is set but not in brand mode, no business constraint
+            print(f"  Brand mode: {category.name} (brand: {brand}, no business constraint)")
+            business = None
+
         # Priority 3: Use LLM metadata
         if sheet_metadata:
             genero = sheet_metadata.get("genero")
@@ -150,14 +174,18 @@ class LoadCategoryProfilesUseCase:
 
             # Filter out "Nulo" values
             gender = genero if genero and genero.lower() != "nulo" else None
-            business = direccion if direccion and direccion.lower() != "nulo" else None
+            direction = direccion if direccion and direccion.lower() != "nulo" else None
 
-            print(f"  LLM metadata: {category.name} (gender: {gender}, business: {business})")
+            if gender or direction:
+                print(f"  LLM metadata: {category.name} (gender: {gender}, direction: {direction})")
 
-            constraints = CategoryConstraints.create(
-                gender=gender or "",
-                business=business or ""
-            )
+        # Create constraints with all fields (convert None to empty string)
+        constraints = CategoryConstraints.create(
+            gender=gender or "",
+            business=business or "",
+            brand=brand or "",
+            direction=direccion or ""
+        )
 
         return CategoryProfile.create(
             category=category,
