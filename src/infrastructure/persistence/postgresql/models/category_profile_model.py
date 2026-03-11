@@ -29,34 +29,24 @@ class CategoryProfileModel(Base):
         primary_key=True,
     )
 
-    allowed_genders: Mapped[list[str] | None] = mapped_column(
-        ARRAY(TEXT),
+    gender: Mapped[str | None] = mapped_column(
+        String(50),
         nullable=True,
-        default=list,
     )
 
-    allowed_business_types: Mapped[list[str] | None] = mapped_column(
-        ARRAY(TEXT),
+    direction: Mapped[str | None] = mapped_column(
+        String(50),
         nullable=True,
-        default=list,
     )
 
-    allowed_directions: Mapped[list[str] | None] = mapped_column(
-        ARRAY(TEXT),
+    business: Mapped[str | None] = mapped_column(
+        String(50),
         nullable=True,
-        default=list,
     )
 
-    allowed_brands: Mapped[list[str] | None] = mapped_column(
-        ARRAY(TEXT),
+    brand: Mapped[str | None] = mapped_column(
+        String(50),
         nullable=True,
-        default=list,
-    )
-
-    required_keywords: Mapped[list[str] | None] = mapped_column(
-        ARRAY(TEXT),
-        nullable=True,
-        default=list,
     )
 
     category: Mapped["CategoryModel"] = relationship(

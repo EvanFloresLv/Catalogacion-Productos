@@ -27,8 +27,7 @@ from application.ports.category_repository import CategoryRepository
 @dataclass
 class LoadCategoriesCommand:
     file_path: str
-    brand: bool
-    business_types: list[str]
+    brand: bool = False  # If True, use sheet name as brand for all categories in that sheet
 
 
 # ---------------------------------------------------------------------
@@ -56,10 +55,21 @@ class LoadCategoriesUseCase:
     def execute(self, cmd: LoadCategoriesCommand) -> List[Category]:
         """
         Load categories from Excel file and save to database.
-        Returns list of all saved categories.
+
+        Args:
+            cmd.file_path: Path to Excel file
+            cmd.brand: If True, use sheet name as brand for all categories
+
+        Returns dict with structure:
+            {
+                "sheet_name": {
+                    "categories": [Category, ...],
+                    "all_key_words": set(["keyword1", ...])
+                }
+            }
         """
         xls = pd.ExcelFile(cmd.file_path)
-        all_categories = []
+        all_categories = {}
 
         parsed_results = []
 
@@ -68,7 +78,7 @@ class LoadCategoriesUseCase:
         # -----------------------------
         with ThreadPoolExecutor(max_workers=self.SHEET_WORKERS) as executor:
             futures = {
-                executor.submit(self._process_sheet, xls, sheet, cmd.brand): sheet
+                executor.submit(self._process_sheet, xls, sheet): sheet
                 for sheet in xls.sheet_names
             }
 
@@ -93,7 +103,18 @@ class LoadCategoriesUseCase:
             categories = self._deduplicate_categories(categories)
 
             saved = self._commit_sheet(sheet_name, categories)
-            all_categories.extend(saved)
+
+            if sheet_name not in all_categories.keys():
+                all_categories[sheet_name] = {
+                    "categories": [],
+                    "all_key_words": set()
+                }
+
+            all_categories[sheet_name]["categories"].extend(saved)
+            # Flatten all keywords from all categories into the set
+            for cat in saved:
+                if cat.keywords_json:
+                    all_categories[sheet_name]["all_key_words"].update(cat.keywords_json)
 
         print(f"\n\nTotal categories loaded: {len(all_categories)}")
 
@@ -106,7 +127,7 @@ class LoadCategoriesUseCase:
         self,
         xls: pd.ExcelFile,
         sheet_name: str,
-        brand: bool
+        use_brand: bool = False,
     ) -> List[Category]:
         """Process a single sheet and return parsed categories."""
 
@@ -128,7 +149,6 @@ class LoadCategoriesUseCase:
             category = self._parse_row(
                 row_dict,
                 last_inserted,
-                sheet_name if brand else None
             )
             if not category:
                 continue
@@ -189,7 +209,6 @@ class LoadCategoriesUseCase:
         self,
         row_dict: Dict[str, Any],
         last_inserted: Dict[int, str],
-        brand: str | None
     ) -> Category | None:
         """Parse a single row into a Category entity."""
 
@@ -225,13 +244,12 @@ class LoadCategoriesUseCase:
 
         category = Category.create(
             id=cat_id,
-            parent_id=parent_id,
             name=name,
             level=level,
-            brand=brand,
+            parent_id=parent_id,
             description=descripcion,
             url=row_dict.get(self._find_key(row_dict, "url")),
-            keywords_json=tuple(keywords)
+            keywords_json=tuple(keywords),
         )
 
         return category

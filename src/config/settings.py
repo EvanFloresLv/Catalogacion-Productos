@@ -19,10 +19,12 @@ from google.auth import default
 class LLMSettings(BaseModel):
     provider: str = "gemini"
 
+    model: str = "gemini-2.5-flash"  # Default model
     model_fast: str = "gemini-2.5-flash"
     model_pro: str = "gemini-2.5-pro"
 
     temperature: float = 0.7
+    max_tokens: int = 2048
 
     embedding_model: str = "text-multilingual-embedding-002"
 

@@ -61,9 +61,6 @@ class Category:
     parent_id: str | None = None
     description: str | None = None
     url: str | None = None
-    brand: str | None = None
-    direction: str | None = None
-    business: str | None = None
 
     # ---------------------------------------------------------
     # Structured fields

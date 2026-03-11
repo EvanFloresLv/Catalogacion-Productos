@@ -34,10 +34,6 @@ class CategoryModel(Base):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     url: Mapped[str] = mapped_column(String(255), nullable=True)
 
-    brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    direction: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    business: Mapped[str | None] = mapped_column(String(100), nullable=True)
-
     semantic_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     keywords_json = Column(JSONB, nullable=False, default=list)
 

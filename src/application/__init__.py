@@ -4,6 +4,7 @@ from .ports.embedding_repository import EmbeddingRepository
 from .ports.exclusion_repository import ExclusionRepository
 from .ports.product_repository import ProductRepository
 from .ports.product_category_exception_repository import ProductCategoryExceptionRepository
+from .ports.llm_service import LLMService
 
 __all__ = [
     "CategoryProfileRepository",
@@ -11,5 +12,6 @@ __all__ = [
     "EmbeddingRepository",
     "ExclusionRepository",
     "ProductRepository",
-    "ProductCategoryExceptionRepository"
+    "ProductCategoryExceptionRepository",
+    "LLMService"
 ]

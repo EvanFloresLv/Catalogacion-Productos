@@ -29,6 +29,9 @@ from application.use_cases.category_profiles.load_profiles import (
     LoadCategoryProfilesCommand,
 )
 
+from application.ports.llm_service import LLMService
+from application.ports.prompt_service import PromptService
+
 
 # ---------------------------------------------------------------------
 # Command
@@ -36,8 +39,8 @@ from application.use_cases.category_profiles.load_profiles import (
 @dataclass
 class LoadCategoriesFromFileCommand:
     file_path: str
-    business_types: list[str]
-    brand: bool
+    business: str = ""  # Business name to apply to all profiles
+    brand: bool = False  # If True, use sheet name as brand
 
 
 # ---------------------------------------------------------------------
@@ -59,6 +62,8 @@ class LoadCategoriesFromFileUseCase:
         profiles_repository: CategoryProfileRepository,
         embedding_repository: EmbeddingRepository,
         embedding_service: EmbeddingService,
+        llm_service: LLMService,
+        prompt_service: PromptService
     ):
         self.session = session
 
@@ -79,12 +84,20 @@ class LoadCategoriesFromFileUseCase:
             profiles_repository=profiles_repository,
         )
 
+        self.llm_service = llm_service
+        self.prompt_service = prompt_service
+
     # =============================================================
     # PUBLIC API
     # =============================================================
     def execute(self, cmd: LoadCategoriesFromFileCommand) -> dict:
         """
         Load categories from Excel file and create embeddings and profiles.
+
+        Args:
+            cmd.file_path: Path to Excel file
+            cmd.business: Business name to apply to all profiles (e.g., "Liverpool")
+            cmd.brand: If True, use sheet names as brand names for categories
 
         Returns:
             dict with keys: categories, embeddings, profiles
@@ -94,13 +107,38 @@ class LoadCategoriesFromFileUseCase:
             print("\n" + "="*60)
             print("STEP 1: Loading Categories")
             print("="*60)
-            categories = self.load_categories_use_case.execute(
+            sheet_categories: dict = self.load_categories_use_case.execute(
                 LoadCategoriesCommand(
                     file_path=cmd.file_path,
-                    business_types=cmd.business_types,
-                    brand=cmd.brand
                 )
             )
+
+            categories = [cat for sheet in sheet_categories.values() for cat in sheet["categories"]]
+
+            # Prepare input data for LLM (keywords by sheet)
+            input_data = {
+                sheet_name: list(sheet_categories[sheet_name]["all_key_words"])
+                for sheet_name in sheet_categories
+            }
+
+            # Get metadata from LLM (only if not using brand mode)
+            metadata = {
+                "data": [],
+                "business": cmd.business,
+                "brand": cmd.brand
+            }
+
+            if not cmd.brand:
+                # Only call LLM if not in brand mode
+                prompt = self.prompt_service.get_prompt(input_data=input_data)
+                metadata["data"] = self.llm_service.chat(
+                    prompt,
+                    schema=prompt.get("schema", {}),
+                    mime_type="application/json"
+                )
+                print(f"\nMetadata by sheet: {metadata['data']}\n")
+            else:
+                print("\nBrand mode: Using sheet names as brands\n")
 
             if not categories:
                 print("No categories loaded. Exiting.")
@@ -118,12 +156,15 @@ class LoadCategoriesFromFileUseCase:
                 LoadEmbeddingsCommand(categories=categories)
             )
 
-            # Step 3: Create profiles
+            # Step 3: Create profiles with metadata
             print("\n" + "="*60)
             print("STEP 3: Creating Profiles")
             print("="*60)
             profiles = self.load_profiles_use_case.execute(
-                LoadCategoryProfilesCommand(categories=categories)
+                LoadCategoryProfilesCommand(
+                    categories_by_sheet=sheet_categories,
+                    metadata=metadata
+                )
             )
 
             print("\n" + "="*60)

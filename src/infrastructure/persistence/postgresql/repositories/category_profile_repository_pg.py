@@ -157,6 +157,7 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
     def _build_row(profile: CategoryProfile) -> dict:
         """
         Build dynamic insert row from CategoryProfile entity.
+        Stores single string values (not arrays) since DB columns are VARCHAR.
         """
 
         constraints = profile.constraints
@@ -167,7 +168,15 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
 
         for field in fields(constraints):
             value = getattr(constraints, field.name)
-            row[field.name] = list(value or [])
+
+            # Store as single string (or None if empty)
+            if isinstance(value, str):
+                row[field.name] = value if value else None
+            elif value:
+                # If it's an iterable, take the first value
+                row[field.name] = str(list(value)[0]) if value else None
+            else:
+                row[field.name] = None
 
         return row
 
@@ -207,9 +216,10 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
         )
 
         # Hydrate Constraints dynamically
+        # DB stores single strings, entity expects strings
         constraints = CategoryConstraints(
             **{
-                field: set(getattr(model, field) or [])
+                field: getattr(model, field) or ""
                 for field in constraints_field_names
                 if hasattr(model, field)
             }

@@ -6,6 +6,8 @@ import infrastructure.persistence.postgresql as pg
 from domain.specifications.eligibility_policy import CategoryEligibilityPolicy
 
 from infrastructure.persistence.postgresql.session import SessionLocal
+from infrastructure.prompts import Prompt
+from infrastructure.llm.gemini import LLMClient
 
 from application.use_cases.categories.load_categories_from_file import (
     LoadCategoriesFromFileUseCase,
@@ -321,8 +323,8 @@ def test_elegibility_policy():
 def test_load_tree_policy():
     cmd = LoadCategoriesFromFileCommand(
         file_path="./data/suburbia.xlsx",
-        brand=True,
-        business_types=["Liverpool"]
+        business="Liverpool",
+        brand=False
     )
 
     with SessionLocal() as session:
@@ -331,13 +333,19 @@ def test_load_tree_policy():
         cat_repository = pg.CategoryRepositoryPG(session)
         prof_repository = pg.CategoryProfileRepositoryPG(session)
         emb_repository = pg.EmbeddingRepositoryPG(session, expected_dimension=768)
+        llm_service = LLMClient()
+        prompt_service = Prompt(
+            file_path="./src/prompts/predict_sheet_data.yaml"
+        )
 
         use_case = LoadCategoriesFromFileUseCase(
             session=session,
             category_repository=cat_repository,
             profiles_repository=prof_repository,
             embedding_repository=emb_repository,
-            embedding_service=embedding
+            embedding_service=embedding,
+            llm_service=llm_service,
+            prompt_service=prompt_service,
         )
 
         use_case.execute(cmd)
@@ -362,14 +370,16 @@ def test():
 
         stmt = session.execute(
             text("""
-                SELECT * FROM categories
-
+                SELECT * FROM category_profiles
             """)
         )
 
-        missing_ids = stmt.fetchall()
+        result = stmt.fetchall()
 
-        print("Result size:", len(missing_ids))
+        for row in result:
+            print(row)
+
+        print("Result size:", len(result))
 
 
 if __name__ == "__main__":

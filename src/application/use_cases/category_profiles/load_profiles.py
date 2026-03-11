@@ -1,7 +1,8 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
-from typing import List
+import json
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 # ---------------------------------------------------------------------
@@ -23,7 +24,8 @@ from application.ports.category_profile_repository import CategoryProfileReposit
 # ---------------------------------------------------------------------
 @dataclass
 class LoadCategoryProfilesCommand:
-    categories: List[Category]
+    categories_by_sheet: Dict
+    metadata: Optional[Dict[str, str]] = None
 
 
 # ---------------------------------------------------------------------
@@ -48,31 +50,118 @@ class LoadCategoryProfilesUseCase:
     def execute(self, cmd: LoadCategoryProfilesCommand) -> List[CategoryProfile]:
         """
         Create profiles for categories and save to database.
+
+        Logic:
+        1. If business is provided in metadata -> apply to all profiles
+        2. If brand mode is enabled -> use sheet names as brands
+        3. Otherwise -> use LLM metadata (direccion, genero) to create constraints
+
         Returns list of saved profiles.
         """
-        if not cmd.categories:
+        if not cmd.categories_by_sheet:
             return []
 
-        # Create default profiles for all categories
-        profiles = [
-            self._create_profile(category)
-            for category in cmd.categories
-        ]
+        # Extract business and brand settings from metadata
+        global_business = None
+        is_brand_mode = False
+
+        if cmd.metadata:
+            global_business = cmd.metadata.get("business")
+            is_brand_mode = cmd.metadata.get("brand", False)
+
+        # Build metadata lookup by sheet name
+        metadata_by_sheet = {}
+        if cmd.metadata and not is_brand_mode:
+            try:
+                # Parse JSON string if needed
+                if isinstance(cmd.metadata.get("data"), str):
+                    metadata_list = json.loads(cmd.metadata.get("data", "[]"))
+                else:
+                    metadata_list = cmd.metadata.get("data", [])
+
+                # Create lookup dict
+                for item in metadata_list:
+                    sheet_name = item.get("sheet_name")
+                    if sheet_name:
+                        metadata_by_sheet[sheet_name] = {
+                            "direccion": item.get("direccion"),
+                            "genero": item.get("genero"),
+                        }
+            except Exception as e:
+                print(f"⚠ Warning: Could not parse metadata: {e}")
+
+        # Create profiles for all categories
+        all_profiles = []
+        for sheet_name, sheet_data in cmd.categories_by_sheet.items():
+            categories = sheet_data.get("categories", [])
+            sheet_metadata = metadata_by_sheet.get(sheet_name, {})
+
+            for category in categories:
+                profile = self._create_profile(
+                    category=category,
+                    sheet_name=sheet_name,
+                    sheet_metadata=sheet_metadata,
+                    global_business=global_business,
+                    is_brand_mode=is_brand_mode,
+                )
+                all_profiles.append(profile)
 
         # Deduplicate and save
-        profiles = self._deduplicate_profiles(profiles)
+        all_profiles = self._deduplicate_profiles(all_profiles)
 
-        return self._commit_profiles(profiles)
+        return self._commit_profiles(all_profiles)
 
     # =============================================================
     # PROFILE CREATION
     # =============================================================
-    @staticmethod
-    def _create_profile(category: Category) -> CategoryProfile:
-        """Create a default profile for a category."""
+    def _create_profile(
+        self,
+        category: Category,
+        sheet_name: str,
+        sheet_metadata: Dict[str, Optional[str]],
+        global_business: Optional[str],
+        is_brand_mode: bool,
+    ) -> CategoryProfile:
+        """
+        Create profile with constraints based on category type and mode:
+
+        Priority order:
+        1. If global_business is set -> apply to all profiles
+        2. If is_brand_mode is True -> use category.brand (from sheet name)
+        3. Otherwise -> use LLM metadata (direccion -> business, genero -> gender)
+        """
+
+        # Priority 1: Global business applies to all
+        if global_business:
+            print(f"  Business mode: {category.name} (business: {global_business})")
+            constraints = CategoryConstraints.create(
+                business=global_business
+            )
+        # Priority 2: Brand mode (categories already have brand from sheet name)
+        if is_brand_mode:
+            print(f"  Brand mode: {category.name} (brand: {sheet_name})")
+            constraints = CategoryConstraints.create(
+                brand=sheet_name
+            )
+        # Priority 3: Use LLM metadata
+        if sheet_metadata:
+            genero = sheet_metadata.get("genero")
+            direccion = sheet_metadata.get("direccion")
+
+            # Filter out "Nulo" values
+            gender = genero if genero and genero.lower() != "nulo" else None
+            business = direccion if direccion and direccion.lower() != "nulo" else None
+
+            print(f"  LLM metadata: {category.name} (gender: {gender}, business: {business})")
+
+            constraints = CategoryConstraints.create(
+                gender=gender or "",
+                business=business or ""
+            )
+
         return CategoryProfile.create(
             category=category,
-            constraints=CategoryConstraints(),
+            constraints=constraints,
         )
 
     # =============================================================
@@ -82,7 +171,6 @@ class LoadCategoryProfilesUseCase:
     def _deduplicate_profiles(
         profiles: List[CategoryProfile],
     ) -> List[CategoryProfile]:
-        """Remove duplicate profiles by category_id."""
         unique = {}
         for profile in profiles:
             unique[profile.category.id] = profile
@@ -95,8 +183,6 @@ class LoadCategoryProfilesUseCase:
         self,
         profiles: List[CategoryProfile],
     ) -> List[CategoryProfile]:
-        """Save profiles to database within a transaction."""
-
         try:
             saved = self.profiles_repository.save_batch(profiles)
             self.session.commit()

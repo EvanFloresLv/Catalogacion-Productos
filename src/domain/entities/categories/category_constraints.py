@@ -17,11 +17,10 @@ from typing import Any, Iterable, Tuple
 
 @dataclass(frozen=True, slots=True)
 class CategoryConstraints:
-    allowed_genders: Tuple[str, ...] = field(default_factory=tuple)
-    allowed_business_types: Tuple[str, ...] = field(default_factory=tuple)
-    allowed_directions: Tuple[str, ...] = field(default_factory=tuple)
-    allowed_brands: Tuple[str, ...] = field(default_factory=tuple)
-    required_keywords: Tuple[str, ...] = field(default_factory=tuple)
+    gender: str | None = None
+    business: str | None = None
+    direction: str | None = None
+    brand: str | None = None
 
 
     @classmethod
@@ -50,27 +49,7 @@ class CategoryConstraints:
         normalized = {}
 
         for name in field_names:
-            value = data.get(name, [])
-            normalized[name] = cls._normalize_iterable(value)
+            value = data.get(name, "")
+            normalized[name] = value.strip().lower()
 
         return cls(**normalized)
-
-
-    # ---------------------------------------------------------
-    # Helpers
-    # ---------------------------------------------------------
-    @staticmethod
-    def _normalize_iterable(
-        value: Iterable[str] | None,
-    ) -> tuple[str, ...]:
-
-        if value is None:
-            return ()
-
-        cleaned = {
-            str(v).strip().lower()
-            for v in value
-            if isinstance(v, str) and v.strip()
-        }
-
-        return tuple(sorted(cleaned))
