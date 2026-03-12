@@ -24,6 +24,7 @@ from application.use_cases.embeddings.load_embeddings import (
     LoadEmbeddingsUseCase,
     LoadEmbeddingsCommand,
 )
+
 from application.use_cases.category_profiles.load_profiles import (
     LoadCategoryProfilesUseCase,
     LoadCategoryProfilesCommand,
@@ -115,30 +116,114 @@ class LoadCategoriesFromFileUseCase:
 
             categories = [cat for sheet in sheet_categories.values() for cat in sheet["categories"]]
 
-            # Prepare input data for LLM (keywords by sheet)
-            input_data = {
-                sheet_name: list(sheet_categories[sheet_name]["all_key_words"])
-                for sheet_name in sheet_categories
-            }
-
-            # Get metadata from LLM (only if not using brand mode)
+            # Prepare metadata structure
             metadata = {
-                "data": [],
+                "data": [],           # Raw LLM responses
+                "by_category": {},    # Lookup by category_id (for brand mode)
+                "by_sheet": {},       # Lookup by sheet_name (for normal mode)
                 "business": cmd.business,
                 "brand": cmd.brand
             }
 
-            if not cmd.brand:
-                # Only call LLM if not in brand mode
-                prompt = self.prompt_service.get_prompt(input_data=input_data)
-                metadata["data"] = self.llm_service.chat(
-                    prompt,
-                    schema=prompt.get("schema", {}),
-                    mime_type="application/json"
-                )
-                print(f"\nMetadata by sheet: {metadata['data']}\n")
+            if cmd.brand:
+                # Brand mode: Process ALL CATEGORIES per sheet using predict_category_sheet_data
+                print("\nBrand mode: Processing categories per sheet...\n")
+
+                for sheet_name in sheet_categories:
+                    print(f"Processing sheet: {sheet_name}")
+
+                    # Get all categories for this sheet
+                    sheet_cats = sheet_categories[sheet_name]["categories"]
+
+                    # Build input data with category_id and keywords
+                    input_data = {}
+                    for cat in sheet_cats:
+                        category_keywords = list(cat.keywords) if cat.keywords else []
+                        if cat.description:
+                            category_keywords.extend(cat.description.split())
+
+                        input_data[cat.id] = {
+                            "palabras_clave": category_keywords
+                        }
+
+                    # Get metadata from LLM for all categories in this sheet
+                    self.prompt_service.load_prompt(path="./src/prompts/predict_category_sheet_data.yaml")
+                    prompt = self.prompt_service.get_prompt(input_data=input_data)
+
+                    sheet_metadata = self.llm_service.chat(
+                        prompt,
+                        schema=prompt.get("schema", {}),
+                        mime_type="application/json"
+                    )
+
+                    # Ensure metadata is a list or dict (parse if it's a string)
+                    if isinstance(sheet_metadata, str):
+                        import json
+                        sheet_metadata = json.loads(sheet_metadata)
+
+                    # Store metadata both in raw list and indexed by category_id
+                    if isinstance(sheet_metadata, list):
+                        metadata["data"].extend(sheet_metadata)
+                        # Index by category_id for easy lookup
+                        for item in sheet_metadata:
+                            if isinstance(item, dict) and "category_id" in item:
+                                metadata["by_category"][item["category_id"]] = item
+                    elif isinstance(sheet_metadata, dict):
+                        metadata["data"].append(sheet_metadata)
+                        if "category_id" in sheet_metadata:
+                            metadata["by_category"][sheet_metadata["category_id"]] = sheet_metadata
+
+                    print(f"  ✓ Sheet '{sheet_name}' processed ({len(sheet_cats)} categories)")
+
+                print(f"\nTotal metadata entries: {len(metadata['data'])}\n")
             else:
-                print("\nBrand mode: Using sheet names as brands\n")
+                # Normal mode: Generate metadata per SHEET using predict_sheet_data
+                print("\nNormal mode: Processing each sheet...\n")
+
+                for sheet_name in sheet_categories:
+                    print(f"Processing sheet: {sheet_name}")
+
+                    # Get keywords for this sheet
+                    input_data = {
+                        sheet_name: {
+                            "palabras_clave": list(sheet_categories[sheet_name]["all_key_words"])
+                        }
+                    }
+
+                    # Get metadata from LLM for this sheet
+                    self.prompt_service.load_prompt(path="./src/prompts/predict_sheet_data.yaml")
+                    prompt = self.prompt_service.get_prompt(input_data=input_data)
+
+                    sheet_metadata = self.llm_service.chat(
+                        prompt,
+                        schema=prompt.get("schema", {}),
+                        mime_type="application/json"
+                    )
+
+                    # Ensure metadata is a list or dict (parse if it's a string)
+                    if isinstance(sheet_metadata, str):
+                        import json
+                        sheet_metadata = json.loads(sheet_metadata)
+
+                    # Store metadata both in raw list and indexed by sheet_name
+                    if isinstance(sheet_metadata, list):
+                        metadata["data"].extend(sheet_metadata)
+                        # Index by sheet_name for easy lookup
+                        for item in sheet_metadata:
+                            if isinstance(item, dict) and "sheet_name" in item:
+                                metadata["by_sheet"][item["sheet_name"]] = item
+                    elif isinstance(sheet_metadata, dict):
+                        metadata["data"].append(sheet_metadata)
+                        if "sheet_name" in sheet_metadata:
+                            metadata["by_sheet"][sheet_metadata["sheet_name"]] = sheet_metadata
+
+                    print(f"  ✓ Sheet '{sheet_name}' processed")
+
+                print(f"\nTotal metadata entries: {len(metadata['data'])}\n")
+
+            print("Final metadata: ")
+            for entry in metadata['data']:
+                print(f"  - {entry}")
 
             if not categories:
                 print("No categories loaded. Exiting.")

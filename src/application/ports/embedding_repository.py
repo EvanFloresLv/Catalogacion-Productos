@@ -54,6 +54,6 @@ class EmbeddingRepository(ABC):
 
     @abstractmethod
     def search_similar(
-        self, query_vector: list[float], limit: int
+        self, query_vector: list[float], category_ids: list[str], limit: int
     ) -> list[Embedding]:
         raise NotImplementedError

@@ -72,7 +72,7 @@ prompt_generate_attributes:
           description: Categoría o temática principal del contenido (ej. tecnología, moda, deportes). Usa 'Nulo' si no se puede determinar.
         genero:
           type: string
-          enum: [hombre, mujer, unisex, genérico]
+          enum: [hombre, mujer, unisex, Nulo]
           description: Género predominante sugerido por las palabras clave (masculino, femenino, neutral). Usa 'Nulo' si no hay evidencia suficiente.
       required:
         - sheet_name

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -17,12 +16,12 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class CategoryMatch:
-    category_id: UUID
+    category_id: str
     score: float
 
 
 @dataclass(frozen=True)
 class ClassificationResult:
-    product_id: UUID
+    product_sku: str
     best: CategoryMatch
     top_k: list[CategoryMatch]

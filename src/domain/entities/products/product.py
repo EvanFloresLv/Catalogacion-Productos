@@ -79,17 +79,15 @@ class Product:
     - internet
     """
     name: str
-    business: str
     sku: str
     description: str
     keywords: Tuple[str, ...]
     product_type: str
-    gender: str
     brand: str
     direction: str
-
-    # Implicit fields
     business: List[str]
+
+    gender: str = None
 
     @classmethod
     def create(cls, **data) -> Product:
@@ -114,11 +112,11 @@ class Product:
         """
         VALID_PRODUCT_TYPES = {
             "marketplace": ["liverpool", "suburbia"],
-            "marcas propias": ["liverpool", "blp"],
+            "marcas propias": ["liverpool"],
             "sfera": ["liverpool", "suburbia"],
-            "regular": ["liverpool", "blp"],
+            "regular": ["liverpool"],
             "suburbia": ["suburbia"],
-            "internet": ["liverpool", "blp"]
+            "internet": ["liverpool"]
         }
 
         field_names = {f.name for f in fields(cls)}

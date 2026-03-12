@@ -2,7 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 from dataclasses import dataclass
-from uuid import UUID
+from typing import List
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -12,21 +12,18 @@ from uuid import UUID
 # Internal application imports
 # ---------------------------------------------------------------------
 from application.ports.product_repository import ProductRepository
-from application.ports.category_profile_repository import CategoryProfileRepository
-from application.ports.exclusion_repository import ExclusionRepository
+from application.ports.embedding_service import EmbeddingService
 from application.ports.embedding_repository import EmbeddingRepository
+from application.ports.category_profile_repository import CategoryProfileRepository
 
-from domain.specifications.eligibility_policy import CategoryEligibilityPolicy
-from domain.entities.products.product_context import ProductContext
+from domain.entities.categories.category_constraints import CategoryConstraints
 from domain.entities.classification.result import ClassificationResult, CategoryMatch
-from domain.entities.classification.errors import NoEligibleCategoriesError, NoEligibleMatchesError
-
-from domain.value_objects.semantic_hash import SemanticHash
+from domain.entities.classification.errors import NoEligibleMatchesError
 
 
 @dataclass(frozen=True)
 class ClassifyProductCommand:
-    product_id: UUID
+    product_sku: str
     top_k: int = 5
 
 
@@ -36,57 +33,102 @@ class ClassifyProductUseCase:
         self,
         products: ProductRepository,
         profiles: CategoryProfileRepository,
-        exclusions: ExclusionRepository,
         embeddings: EmbeddingRepository,
-        policy: CategoryEligibilityPolicy,
+        embeddings_service: EmbeddingService,
     ):
         self.products = products
         self.profiles = profiles
-        self.exclusions = exclusions
         self.embeddings = embeddings
-        self.policy = policy
+        self.embeddings_service = embeddings_service
 
 
-    def execute(self, cmd: ClassifyProductCommand) -> ClassificationResult:
+    def execute(self, cmd: ClassifyProductCommand) -> List[ClassificationResult]:
 
-        product = self.products.get_by_id(cmd.product_id)
+        # Get product by SKU
+        product = self.products.get_by_sku(cmd.product_sku)
 
         if not product:
-            raise ValueError(f"Product with ID {cmd.product_id} not found.")
+            raise ValueError(f"Product with SKU {cmd.product_sku} not found.")
 
-        ctx = ProductContext(
-            gender=product.gender,
-            business_type=product.business_type
-        )
+        results = []
 
-        profiles = self.profiles.list_all_profiles()
-        excluded = self.exclusions.get_excluded_category_ids(product.id)
+        for business in product.business:
+            # Create constraints from product attributes for current business
+            constraints = CategoryConstraints.create(
+                gender=product.gender,
+                business=business,
+                direction=product.direction,
+                brand=product.brand
+            )
 
-        allowed_ids = set()
-        for prof in profiles:
-            cid = prof.category.id
-            if cid in excluded:
+            print(f"\n{'='*50}")
+            print(f"Processing business: {business}")
+            print(f"{'='*50}")
+            print("Product constraints:")
+            print(f"  - SKU: {product.sku}")
+            print(f"  - Gender: {product.gender}")
+            print(f"  - Business: {business}")
+            print(f"  - Direction: {product.direction}")
+            print(f"  - Brand: {product.brand}")
+
+            # Get profiles that match the product constraints
+            matching_profiles = self.profiles.get_profiles_by_constraints(
+                constraints=constraints
+            )
+
+            print(f"\nMatching profiles found: {len(matching_profiles)}")
+
+            # Extract category IDs from matching profiles
+            allowed_category_ids = {profile.category.id for profile in matching_profiles}
+
+            if not allowed_category_ids:
+                # Show helpful error message
+                print(f"\nWARNING: No categories match the product constraints for business '{business}'")
+                print(f"  gender={product.gender}, business={business}, "
+                      f"direction={product.direction}, brand={product.brand}")
+                print("Skipping this business and continuing with next...\n")
                 continue
-            if self.policy.is_allowed(ctx, prof):
-                allowed_ids.add(cid)
 
-        if not allowed_ids:
-            raise NoEligibleCategoriesError("No eligible categories for this product")
+            # Generate semantic hash from product
+            query_product = self.embeddings_service.generate(product.to_embedding_text())
 
-        query = SemanticHash.from_text(product.to_embedding_text()).value
+            # Search for similar embeddings
+            raw_results = self.embeddings.search_similar(
+                query_vector=query_product,
+                category_ids=allowed_category_ids,
+                limit=cmd.top_k * 3  # Get more results for filtering
+            )
 
-        # Buscamos un top-N grande para que el filtrado no mate resultados
-        raw = self.embeddings
+            # Extract category IDs and scores from embedding results
+            # raw_results is List[Tuple[Embedding, float]]
+            filtered = [
+                (embedding.category_id, abs(score))
+                for embedding, score in raw_results
+                if embedding.category_id in allowed_category_ids
+            ]
 
-        filtered = [(cid, abs(score)) for cid, score in raw if cid in allowed_ids]
-        if not filtered:
-            raise NoEligibleMatchesError("No eligible matches found")
+            if not filtered:
+                print(f"\nWARNING: No eligible matches found after filtering for business '{business}'")
+                print("Skipping this business and continuing with next...\n")
+                continue
 
-        filtered = filtered[: cmd.top_k]
-        best_id, best_score = filtered[0]
+            # Get top K results
+            filtered = filtered[:cmd.top_k]
+            best_id, best_score = filtered[0]
 
-        return ClassificationResult(
-            product_id=product.id,
-            best=CategoryMatch(category_id=best_id, score=float(best_score)),
-            top_k=[CategoryMatch(category_id=cid, score=float(score)) for cid, score in filtered],
-        )
+            results.append(ClassificationResult(
+                product_sku=product.sku,
+                best=CategoryMatch(category_id=best_id, score=float(best_score)),
+                top_k=[
+                    CategoryMatch(category_id=cid, score=float(score))
+                    for cid, score in filtered
+                ],
+            ))
+
+        # If no results were generated for any business, raise an error
+        if not results:
+            raise NoEligibleMatchesError(
+                f"No eligible matches found for product {product.sku} across all businesses: {product.business}"
+            )
+
+        return results

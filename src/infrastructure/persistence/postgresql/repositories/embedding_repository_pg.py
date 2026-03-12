@@ -148,7 +148,7 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
     def search_similar(
         self,
         query_vector: list[float],
-        category_ids: list[UUID],
+        category_ids: list[str],
         limit: int = 10,
     ) -> List[Tuple[Embedding, float]]:
 
@@ -229,8 +229,9 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
 
     @staticmethod
     def _to_entity(model: EmbeddingModel) -> Embedding:
-        field_names = {f.name for f in fields(Embedding)}
+        # Only include fields that can be passed to __init__ (init=True)
+        init_field_names = {f.name for f in fields(Embedding) if f.init}
 
         return Embedding(
-            **{field: getattr(model, field) for field in field_names}
+            **{field: getattr(model, field) for field in init_field_names if hasattr(model, field)}
         )

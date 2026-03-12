@@ -2,7 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -16,7 +16,7 @@ from typing import Any, Dict
 class PromptService(ABC):
 
     @abstractmethod
-    def load_prompt(self) -> Dict[str, Any]:
+    def load_prompt(self, name: Optional[str] = None) -> Dict[str, Any]:
         raise NotImplementedError
 
 

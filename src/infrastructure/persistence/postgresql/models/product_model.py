@@ -5,7 +5,7 @@
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import String, Text
+from sqlalchemy import String, Text, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 # ---------------------------------------------------------------------
@@ -25,4 +25,4 @@ class ProductModel(Base):
     gender: Mapped[str | None] = mapped_column(String(50), nullable=True)
     direction: Mapped[str | None] = mapped_column(String(50), nullable=True)
     brand: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    business: Mapped[str] = mapped_column(String(50), nullable=False)
+    business: Mapped[list[str]] = mapped_column(ARRAY(String(50)), nullable=False)

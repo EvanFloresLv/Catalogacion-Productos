@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from domain.entities.categories.category import Category
 from domain.entities.categories.category_constraints import CategoryConstraints
 from domain.entities.categories.category_profile import CategoryProfile
-from domain.specifications.brand_business_policy import BrandBusinessPolicy
 from application.ports.category_profile_repository import CategoryProfileRepository
 
 
@@ -70,38 +69,57 @@ class LoadCategoryProfilesUseCase:
             global_business = cmd.metadata.get("business")
             is_brand_mode = cmd.metadata.get("brand", False)
 
-        # Build metadata lookup by sheet name
-        metadata_by_sheet = {}
-        if cmd.metadata and not is_brand_mode:
-            try:
-                # Parse JSON string if needed
-                if isinstance(cmd.metadata.get("data"), str):
-                    metadata_list = json.loads(cmd.metadata.get("data", "[]"))
-                else:
-                    metadata_list = cmd.metadata.get("data", [])
+        # Build metadata lookups
+        metadata_by_sheet = {}      # For normal mode (sheet_name lookup)
+        metadata_by_category = {}   # For brand mode (category_id lookup)
 
-                # Create lookup dict
-                for item in metadata_list:
-                    sheet_name = item.get("sheet_name")
-                    if sheet_name:
-                        metadata_by_sheet[sheet_name] = {
-                            "direccion": item.get("direccion"),
-                            "genero": item.get("genero"),
-                        }
-            except Exception as e:
-                print(f"⚠ Warning: Could not parse metadata: {e}")
+        if cmd.metadata:
+            # Get metadata indexed by sheet (normal mode)
+            if "by_sheet" in cmd.metadata:
+                metadata_by_sheet = cmd.metadata["by_sheet"]
+
+            # Get metadata indexed by category (brand mode)
+            if "by_category" in cmd.metadata:
+                metadata_by_category = cmd.metadata["by_category"]
+
+            # Legacy: Parse from data list if new structure not available
+            if not metadata_by_sheet and not metadata_by_category and not is_brand_mode:
+                try:
+                    # Parse JSON string if needed
+                    if isinstance(cmd.metadata.get("data"), str):
+                        metadata_list = json.loads(cmd.metadata.get("data", "[]"))
+                    else:
+                        metadata_list = cmd.metadata.get("data", [])
+
+                    # Create lookup dict by sheet_name
+                    for item in metadata_list:
+                        sheet_name = item.get("sheet_name")
+                        if sheet_name:
+                            metadata_by_sheet[sheet_name] = {
+                                "direccion": item.get("direccion"),
+                                "genero": item.get("genero"),
+                            }
+                except Exception as e:
+                    print(f"⚠ Warning: Could not parse metadata: {e}")
 
         # Create profiles for all categories
         all_profiles = []
         for sheet_name, sheet_data in cmd.categories_by_sheet.items():
             categories = sheet_data.get("categories", [])
-            sheet_metadata = metadata_by_sheet.get(sheet_name, {})
 
             for category in categories:
+                # Get metadata based on mode
+                if is_brand_mode:
+                    # Brand mode: lookup by category_id
+                    category_metadata = metadata_by_category.get(category.id, {})
+                else:
+                    # Normal mode: lookup by sheet_name
+                    category_metadata = metadata_by_sheet.get(sheet_name, {})
+
                 profile = self._create_profile(
                     category=category,
                     sheet_name=sheet_name,
-                    sheet_metadata=sheet_metadata,
+                    category_metadata=category_metadata,
                     global_business=global_business,
                     is_brand_mode=is_brand_mode,
                 )
@@ -119,7 +137,7 @@ class LoadCategoryProfilesUseCase:
         self,
         category: Category,
         sheet_name: str,
-        sheet_metadata: Dict[str, Optional[str]],
+        category_metadata: Dict[str, Optional[str]],
         global_business: Optional[str],
         is_brand_mode: bool,
     ) -> CategoryProfile:
@@ -130,7 +148,7 @@ class LoadCategoryProfilesUseCase:
         1. If global_business is set -> apply to all profiles
         2. If is_brand_mode is True -> use category.brand (from sheet name)
            AND apply brand business policy to set allowed businesses
-        3. Otherwise -> use LLM metadata (direccion -> business, genero -> gender)
+        3. Use LLM metadata (direccion -> direction, genero -> gender)
         """
 
         # Initialize all constraint fields to None
@@ -145,18 +163,19 @@ class LoadCategoryProfilesUseCase:
         if is_brand_mode:
             brand = str(sheet_name).lower().strip()
 
-        if sheet_metadata:
-            genero = sheet_metadata.get("genero")
-            direccion = sheet_metadata.get("direccion")
+        # Apply LLM metadata if available
+        if category_metadata:
+            genero = category_metadata.get("genero")
+            direccion_meta = category_metadata.get("direccion")
 
             # Filter out "Nulo" values
             gender = genero if genero and genero.lower() != "nulo" else None
-            direction = direccion if direccion and direccion.lower() != "nulo" else None
+            direccion = direccion_meta if direccion_meta and direccion_meta.lower() != "nulo" else None
 
-            if gender or direction:
-                print(f"  LLM metadata: {category.name} (gender: {gender}, direction: {direction})")
+            if gender or direccion:
+                print(f"  ✓ Metadata applied: {category.id} -> gender={gender}, direccion={direccion}")
 
-        # Create constraints with all fields (convert None to empty string)
+        # Create constraints with all fields
         constraints = CategoryConstraints.create(
             gender=gender,
             business=business,

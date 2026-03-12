@@ -8,6 +8,7 @@ from domain.specifications.eligibility_policy import CategoryEligibilityPolicy
 from infrastructure.persistence.postgresql.session import SessionLocal
 from infrastructure.prompts import Prompt
 from infrastructure.llm.gemini import LLMClient
+from infrastructure.embeddings.gemini.client import EmbeddingClient
 
 from application.use_cases.categories.load_categories_from_file import (
     LoadCategoriesFromFileUseCase,
@@ -17,6 +18,11 @@ from application.use_cases.categories.load_categories_from_file import (
 from application.use_cases.products.create_product import (
     CreateProductUseCase,
     CreateProductCommand
+)
+
+from application.use_cases.classification.classify_product import (
+    ClassifyProductUseCase,
+    ClassifyProductCommand
 )
 
 def test_embedding_generation():
@@ -327,9 +333,9 @@ def test_elegibility_policy():
 
 def test_load_tree_policy():
     cmd = LoadCategoriesFromFileCommand(
-        file_path="./data/suburbia.xlsx",
+        file_path="./data/test.xlsx",
         business="Suburbia",
-        brand=False
+        brand=False,  # Use sheet names as brand names and apply brand business policy
     )
 
     with SessionLocal() as session:
@@ -339,9 +345,7 @@ def test_load_tree_policy():
         prof_repository = pg.CategoryProfileRepositoryPG(session)
         emb_repository = pg.EmbeddingRepositoryPG(session, expected_dimension=768)
         llm_service = LLMClient()
-        prompt_service = Prompt(
-            file_path="./src/prompts/predict_sheet_data.yaml"
-        )
+        prompt_service = Prompt()
 
         use_case = LoadCategoriesFromFileUseCase(
             session=session,
@@ -364,10 +368,10 @@ def test_create_product():
             "name": "Test Product Name",
             "description": "Product for testing.",
             "keywords": ["test", "product"],
-            "product_type": "regular",
-            "gender": "unisex",
+            "product_type": "marketplace",
+            "gender": None,
             "brand": "Test Brand",  # Changed from 'brand' to 'brands'
-            "direction": "muebles",
+            "direction": "alimentos y bebidas",
         },
         {
             "sku": "00-00-01",
@@ -375,9 +379,9 @@ def test_create_product():
             "description": "Product for testing 2.",
             "keywords": ["test", "product"],
             "product_type": "marketplace",
-            "gender": "unisex",
+            "gender": None,
             "brand": "Test Brand",  # Changed from 'brand' to 'brands'
-            "direction": "muebles",
+            "direction": "alimentos y bebidas",
         }
     ]
     cmd = CreateProductCommand(
@@ -406,11 +410,49 @@ def test_create_product():
             print(f" - Direction: {product.direction}")
 
 
+def test_classification_product():
+    cmd = ClassifyProductCommand(
+        product_sku="00-00-00",
+        top_k=5
+    )
+
+    with SessionLocal() as session:
+
+        product_repository = pg.ProductRepositoryPG(session)
+        category_profile_repository = pg.CategoryProfileRepositoryPG(session)
+        embedding_repository = pg.EmbeddingRepositoryPG(session, expected_dimension=768)
+        embedding_service = EmbeddingClient(embedding_dim=768)
+
+        use_case = ClassifyProductUseCase(
+            products=product_repository,
+            profiles=category_profile_repository,
+            embeddings=embedding_repository,
+            embeddings_service=embedding_service,
+        )
+
+        results = use_case.execute(cmd)
+
+        print("\n" + "="*60)
+        print("CLASSIFICATION RESULTS")
+        print("="*60)
+
+        for idx, result in enumerate(results, 1):
+            print(f"\nResult #{idx}:")
+            print(f" - Product SKU: {result.product_sku}")
+            print(f" - Best match: {result.best.category_id}, Score: {result.best.score:.4f}")
+            print(" - Top K matches:")
+            for match in result.top_k:
+                print(f"   - Category ID: {match.category_id}, Score: {match.score:.4f}")
+
+        print("\n" + "="*60)
+
+
 if __name__ == "__main__":
     # test_embedding_generation()
     # test_hashing()
     # test_unique_hashes()
     # test_constraints()
     # test_elegibility_policy()
-    test_load_tree_policy()
-    # test_create_product()
+    # test_load_tree_policy()
+    test_create_product()
+    test_classification_product()

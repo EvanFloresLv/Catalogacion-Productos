@@ -130,15 +130,30 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
             selectinload(CategoryProfileModel.category)
         )
 
-        # Dynamically apply overlap filters
+        print("\n=== Querying profiles by constraints ===")
+        print(f"Constraints: gender={constraints.gender}, business={constraints.business}, "
+              f"direction={constraints.direction}, brand={constraints.brand}")
+
+        # Apply equality filters for each constraint field
+        # Since all fields are now VARCHAR (not arrays), we use simple equality
+        # Profiles with NULL values for any field are considered wildcards that match everything
         for field in fields(CategoryConstraints):
             value = getattr(constraints, field.name)
             if value:
-                stmt = stmt.where(
-                    getattr(CategoryProfileModel, field.name).overlap(
-                        list(value)
+                model_field = getattr(CategoryProfileModel, field.name)
+
+                # Special handling for brand: always include profiles with brand=None
+                # This makes NULL brand a wildcard that matches any product
+                if field.name == "brand":
+                    print(f"  - Adding filter: {field.name} = '{value}' OR {field.name} IS NULL (wildcard)")
+                    stmt = stmt.where(
+                        (model_field == value) | (model_field.is_(None))
                     )
-                )
+                else:
+                    print(f"  - Adding filter: {field.name} = '{value}' OR {field.name} IS NULL")
+                    stmt = stmt.where(
+                        (model_field == value) | (model_field.is_(None))
+                    )
 
         stmt = stmt.order_by(CategoryProfileModel.category_id)
 
@@ -146,6 +161,12 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
             stmt = stmt.limit(limit)
 
         rows = self.session.execute(stmt).scalars().all()
+
+        print(f"Found {len(rows)} matching profiles")
+        if rows:
+            for row in rows[:5]:  # Show first 5
+                print(f"  - Profile: category_id={row.category_id}, gender={row.gender}, "
+                      f"business={row.business}, direction={row.direction}, brand={row.brand}")
 
         return [self._to_entity(r) for r in rows]
 
