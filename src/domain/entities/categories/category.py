@@ -65,7 +65,7 @@ class Category:
     # ---------------------------------------------------------
     # Structured fields
     # ---------------------------------------------------------
-    keywords_json: Tuple[str, ...] = field(default_factory=tuple)
+    keywords: Tuple[str, ...] = field(default_factory=tuple)
 
     # ---------------------------------------------------------
     # Factory
@@ -97,7 +97,7 @@ class Category:
         for field_name in allowed_input_fields:
             value = data.get(field_name)
 
-            if field_name == "keywords_json":
+            if field_name == "keywords":
                 normalized[field_name] = _normalize_keywords(value)
             elif isinstance(value, str) or value is None:
                 normalized[field_name] = _normalize_text(value)
@@ -108,7 +108,7 @@ class Category:
             cls._build_embedding_text(
                 name=normalized["name"],
                 description=normalized.get("description", ""),
-                keywords=normalized.get("keywords_json", ()),
+                keywords=normalized.get("keywords", ()),
             )
         ).value
 
@@ -168,7 +168,7 @@ class Category:
         return self._build_embedding_text(
             self.name,
             self.description or "",
-            self.keywords_json or (),
+            self.keywords or (),
         )
 
 

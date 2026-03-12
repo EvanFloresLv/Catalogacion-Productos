@@ -121,7 +121,7 @@ class CategoryRepositoryPG(CategoryRepository):
             value = getattr(category, field.name)
 
             # Convert tuple -> list for Postgres arrays
-            if field.name == "keywords_json":
+            if field.name == "keywords":
                 value = list(value or [])
 
             row[field.name] = value

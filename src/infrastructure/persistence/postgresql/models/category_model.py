@@ -35,7 +35,7 @@ class CategoryModel(Base):
     url: Mapped[str] = mapped_column(String(255), nullable=True)
 
     semantic_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    keywords_json = Column(JSONB, nullable=False, default=list)
+    keywords = Column(JSONB, nullable=False, default=list)
 
     parent_id: Mapped[str | None] = mapped_column(
         String(36),

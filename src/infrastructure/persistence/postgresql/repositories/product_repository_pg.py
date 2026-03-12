@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 from domain.entities.products.product import Product
 from application.ports.product_repository import ProductRepository
 from infrastructure.persistence.postgresql.models.product_model import ProductModel
-from utils.json import set_to_json, json_to_set
 
 
 class ProductRepositoryPG(ProductRepository):
@@ -148,7 +147,7 @@ class ProductRepositoryPG(ProductRepository):
         Convert ProductModel to Product entity.
 
         Maps all fields from the model to the entity,
-        handling keywords_json properly.
+        handling keywords properly.
         """
         values = {
             field.name: getattr(model, field.name)

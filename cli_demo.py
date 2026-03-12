@@ -328,7 +328,7 @@ def test_elegibility_policy():
 def test_load_tree_policy():
     cmd = LoadCategoriesFromFileCommand(
         file_path="./data/suburbia.xlsx",
-        business="Liverpool",
+        business="Suburbia",
         brand=False
     )
 
@@ -362,24 +362,22 @@ def test_create_product():
         {
             "sku": "00-00-00",
             "name": "Test Product Name",
-            "business": "liverpool",
             "description": "Product for testing.",
             "keywords": ["test", "product"],
-            "product_type": "marketplace",
+            "product_type": "regular",
             "gender": "unisex",
-            "brand": "Test Brand",
-            "direction": "muebles"
+            "brand": "Test Brand",  # Changed from 'brand' to 'brands'
+            "direction": "muebles",
         },
         {
             "sku": "00-00-01",
             "name": "Test Product Name 2",
-            "business": "liverpool",
             "description": "Product for testing 2.",
             "keywords": ["test", "product"],
             "product_type": "marketplace",
             "gender": "unisex",
-            "brand": "Test Brand",
-            "direction": "muebles"
+            "brand": "Test Brand",  # Changed from 'brand' to 'brands'
+            "direction": "muebles",
         }
     ]
     cmd = CreateProductCommand(
@@ -399,6 +397,7 @@ def test_create_product():
             print("="*30)
             print(f" - SKU: {product.sku}")
             print(f" - Name: {product.name}")
+            print(f" - Product type: {product.product_type}")
             print(f" - Description: {product.description}")
             print(f" - Keywords: {product.keywords}")
             print(f" - Gender: {product.gender}")
@@ -413,5 +412,5 @@ if __name__ == "__main__":
     # test_unique_hashes()
     # test_constraints()
     # test_elegibility_policy()
-    # test_load_tree_policy()
-    test_create_product()
+    test_load_tree_policy()
+    # test_create_product()

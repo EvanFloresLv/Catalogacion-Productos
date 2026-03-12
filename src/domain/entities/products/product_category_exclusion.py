@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -17,6 +16,6 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class ProductCategoryExclusion:
-    product_id: UUID
-    category_id: UUID
+    product_id: str
+    category_id: str
     reason: str

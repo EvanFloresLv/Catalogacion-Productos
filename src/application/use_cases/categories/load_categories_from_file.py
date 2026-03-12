@@ -39,7 +39,7 @@ from application.ports.prompt_service import PromptService
 @dataclass
 class LoadCategoriesFromFileCommand:
     file_path: str
-    business: str = ""  # Business name to apply to all profiles
+    business: str        # Business name to apply to all profiles
     brand: bool = False  # If True, use sheet name as brand
 
 

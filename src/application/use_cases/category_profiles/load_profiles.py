@@ -136,38 +136,15 @@ class LoadCategoryProfilesUseCase:
         # Initialize all constraint fields to None
         gender = None
         direccion = None
-        business = None
         brand = None
+        business = None
 
-        # Priority 1: Global business applies to all
         if global_business:
-            print(f"  Business mode: {category.name} (business: {global_business})")
             business = str(global_business).lower().strip()
 
-        # Priority 2: Brand mode (categories already have brand from sheet name)
-        # Apply brand business policy to determine allowed businesses
         if is_brand_mode:
-            brand = str(sheet_name).strip()  # Keep original case for brand
+            brand = str(sheet_name).lower().strip()
 
-            # Check if brand is in Liverpool exclusion list
-            is_excluded_from_liverpool = BrandBusinessPolicy.is_brand_excluded_from_business(
-                brand, "liverpool"
-            )
-
-            if is_excluded_from_liverpool:
-                # Brand excluded from Liverpool → can only be in Suburbia
-                business = "suburbia"
-                print(f"  Brand mode: {category.name} (brand: {brand}, business: suburbia [Liverpool excluded])")
-            else:
-                # Brand allowed in Liverpool → set to Liverpool only
-                business = "liverpool"
-                print(f"  Brand mode: {category.name} (brand: {brand}, business: liverpool)")
-        elif is_brand_mode is False and brand:
-            # If brand is set but not in brand mode, no business constraint
-            print(f"  Brand mode: {category.name} (brand: {brand}, no business constraint)")
-            business = None
-
-        # Priority 3: Use LLM metadata
         if sheet_metadata:
             genero = sheet_metadata.get("genero")
             direccion = sheet_metadata.get("direccion")
@@ -181,10 +158,10 @@ class LoadCategoryProfilesUseCase:
 
         # Create constraints with all fields (convert None to empty string)
         constraints = CategoryConstraints.create(
-            gender=gender or "",
-            business=business or "",
-            brand=brand or "",
-            direction=direccion or ""
+            gender=gender,
+            business=business,
+            brand=brand,
+            direction=direccion
         )
 
         return CategoryProfile.create(

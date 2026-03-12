@@ -17,14 +17,17 @@ cryptography==46.0.5
 debugpy==1.8.20
 decorator==5.2.1
 distro==1.9.0
+et_xmlfile==2.0.0
 executing==2.2.1
 faiss-cpu==1.13.2
 fastapi==0.129.0
 filelock==3.24.0
 frozenlist==1.8.0
 fsspec==2026.2.0
+google-api-core==2.30.0
 google-auth==2.48.0
 google-genai==1.64.0
+googleapis-common-protos==1.73.0
 greenlet==3.3.2
 h11==0.16.0
 hf-xet==1.2.0
@@ -51,15 +54,18 @@ nest-asyncio==1.6.0
 networkx==3.6.1
 nltk==3.9.3
 numpy==2.4.2
+openpyxl==3.1.5
 packaging==26.0
 pandas==3.0.1
 parso==0.8.6
 pexpect==4.9.0
 pgvector==0.4.2
 platformdirs==4.9.1
--e git+https://github.com/EvanFloresLv/Catalogaci-n-Productos.git@ae791fa460a07e4421759d4fa8464569a27c7f37#egg=product_categorizer
+-e git+https://github.com/EvanFloresLv/Catalogaci-n-Productos.git@4e371ddf86dbba2da6935edd3283a5998837e375#egg=product_categorizer
 prompt_toolkit==3.0.52
 propcache==0.4.1
+proto-plus==1.27.1
+protobuf==6.33.5
 psutil==7.2.2
 psycopg==3.3.3
 psycopg-binary==3.3.3

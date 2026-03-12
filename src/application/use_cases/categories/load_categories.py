@@ -113,8 +113,8 @@ class LoadCategoriesUseCase:
             all_categories[sheet_name]["categories"].extend(saved)
             # Flatten all keywords from all categories into the set
             for cat in saved:
-                if cat.keywords_json:
-                    all_categories[sheet_name]["all_key_words"].update(cat.keywords_json)
+                if cat.keywords:
+                    all_categories[sheet_name]["all_key_words"].update(cat.keywords)
 
         print(f"\n\nTotal categories loaded: {len(all_categories)}")
 
@@ -249,7 +249,7 @@ class LoadCategoriesUseCase:
             parent_id=parent_id,
             description=descripcion,
             url=row_dict.get(self._find_key(row_dict, "url")),
-            keywords_json=tuple(keywords),
+            keywords=tuple(keywords),
         )
 
         return category

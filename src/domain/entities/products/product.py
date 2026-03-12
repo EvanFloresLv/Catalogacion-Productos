@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass, fields
-from typing import Tuple, Any, Iterable
+from typing import Tuple, Any, Iterable, List
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -78,18 +78,18 @@ class Product:
     - suburbia
     - internet
     """
-    # Required fields
     name: str
     business: str
     sku: str
     description: str
     keywords: Tuple[str, ...]
     product_type: str
+    gender: str
+    brand: str
+    direction: str
 
-    # Optional fields
-    gender: str | None = None
-    direction: str | None = None
-    brand: str | None = None
+    # Implicit fields
+    business: List[str]
 
     @classmethod
     def create(cls, **data) -> Product:
@@ -113,12 +113,12 @@ class Product:
             ProductError: If unknown fields provided or validation fails
         """
         VALID_PRODUCT_TYPES = {
-            "marketplace",
-            "marcas propias",
-            "sfera",
-            "regular",
-            "suburbia",
-            "internet"
+            "marketplace": ["liverpool", "suburbia"],
+            "marcas propias": ["liverpool", "blp"],
+            "sfera": ["liverpool", "suburbia"],
+            "regular": ["liverpool", "blp"],
+            "suburbia": ["suburbia"],
+            "internet": ["liverpool", "blp"]
         }
 
         field_names = {f.name for f in fields(cls)}
@@ -189,11 +189,13 @@ class Product:
         # Validate product_type if provided
         if "product_type" in normalized:
             product_type = normalized["product_type"]
-            if product_type and product_type not in VALID_PRODUCT_TYPES:
+            if product_type and product_type not in VALID_PRODUCT_TYPES.keys():
                 raise ProductError(
                     f"Invalid product_type '{product_type}'. "
-                    f"Must be one of: {', '.join(sorted(VALID_PRODUCT_TYPES))}"
+                    f"Must be one of: {', '.join(sorted(VALID_PRODUCT_TYPES.keys()))}"
                 )
+            else:
+                normalized["business"] = VALID_PRODUCT_TYPES.get(product_type, [])
 
         # Ensure keywords is set even if empty
         if "keywords" not in normalized:

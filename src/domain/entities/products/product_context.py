@@ -17,4 +17,6 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class ProductContext:
     gender: str
-    business_type: str
+    business: str
+    direction: str
+    brand: str

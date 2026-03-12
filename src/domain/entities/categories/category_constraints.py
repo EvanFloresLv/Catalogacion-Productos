@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, field
 from typing import Any
 
 # ---------------------------------------------------------------------
@@ -18,9 +18,9 @@ from typing import Any
 @dataclass(frozen=True, slots=True)
 class CategoryConstraints:
     gender: str | None = None
-    business: str | None = None
     direction: str | None = None
     brand: str | None = None
+    business: str | None = None
 
 
     @classmethod
@@ -49,7 +49,7 @@ class CategoryConstraints:
         normalized = {}
 
         for name in field_names:
-            value = data.get(name, "")
-            normalized[name] = value.strip().lower()
+            value = data.get(name, None)
+            normalized[name] = value.strip().lower() if value else None
 
         return cls(**normalized)
