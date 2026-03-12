@@ -63,11 +63,9 @@ class LoadCategoryProfilesUseCase:
             return []
 
         # Extract business and brand settings from metadata
-        global_business = None
         is_brand_mode = False
 
         if cmd.metadata:
-            global_business = cmd.metadata.get("business")
             is_brand_mode = cmd.metadata.get("brand", False)
 
         # Build metadata lookup by sheet name
@@ -102,7 +100,6 @@ class LoadCategoryProfilesUseCase:
                     category=category,
                     sheet_name=sheet_name,
                     sheet_metadata=sheet_metadata,
-                    global_business=global_business,
                     is_brand_mode=is_brand_mode,
                 )
                 all_profiles.append(profile)
@@ -120,7 +117,6 @@ class LoadCategoryProfilesUseCase:
         category: Category,
         sheet_name: str,
         sheet_metadata: Dict[str, Optional[str]],
-        global_business: Optional[str],
         is_brand_mode: bool,
     ) -> CategoryProfile:
         """
@@ -133,53 +129,44 @@ class LoadCategoryProfilesUseCase:
         3. Otherwise -> use LLM metadata (direccion -> business, genero -> gender)
         """
 
-        # Initialize all constraint fields to None
         gender = None
         direccion = None
         business = None
         brand = None
 
-        # Priority 1: Global business applies to all
-        if global_business:
-            print(f"  Business mode: {category.name} (business: {global_business})")
-            business = str(global_business).lower().strip()
-
-        # Priority 2: Brand mode (categories already have brand from sheet name)
-        # Apply brand business policy to determine allowed businesses
         if is_brand_mode:
             brand = str(sheet_name).strip()  # Keep original case for brand
 
-            # Check if brand is in Liverpool exclusion list
             is_excluded_from_liverpool = BrandBusinessPolicy.is_brand_excluded_from_business(
                 brand, "liverpool"
             )
+            is_excluded_from_suburbia = BrandBusinessPolicy.is_brand_excluded_from_business(
+                brand, "suburbia"
+            )
 
             if is_excluded_from_liverpool:
-                # Brand excluded from Liverpool → can only be in Suburbia
                 business = "suburbia"
                 print(f"  Brand mode: {category.name} (brand: {brand}, business: suburbia [Liverpool excluded])")
-            else:
-                # Brand allowed in Liverpool → set to Liverpool only
+            elif is_excluded_from_suburbia:
                 business = "liverpool"
-                print(f"  Brand mode: {category.name} (brand: {brand}, business: liverpool)")
+                print(f"  Brand mode: {category.name} (brand: {brand}, business: liverpool [Suburbia excluded])")
+            else:
+                business = None
+                print(f"  Brand mode: {category.name} (brand: {brand}, no business constraint)")
         elif is_brand_mode is False and brand:
-            # If brand is set but not in brand mode, no business constraint
             print(f"  Brand mode: {category.name} (brand: {brand}, no business constraint)")
             business = None
 
-        # Priority 3: Use LLM metadata
         if sheet_metadata:
             genero = sheet_metadata.get("genero")
             direccion = sheet_metadata.get("direccion")
 
-            # Filter out "Nulo" values
             gender = genero if genero and genero.lower() != "nulo" else None
             direction = direccion if direccion and direccion.lower() != "nulo" else None
 
             if gender or direction:
                 print(f"  LLM metadata: {category.name} (gender: {gender}, direction: {direction})")
 
-        # Create constraints with all fields (convert None to empty string)
         constraints = CategoryConstraints.create(
             gender=gender or "",
             business=business or "",

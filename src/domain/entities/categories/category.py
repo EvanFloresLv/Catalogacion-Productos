@@ -54,18 +54,21 @@ class Category:
     name: str
     level: int
     semantic_hash: str
+    business: str
 
     # ---------------------------------------------------------
     # Optional fields
     # ---------------------------------------------------------
+    brand: str | None = None
     parent_id: str | None = None
     description: str | None = None
+    gender: str | None = None
     url: str | None = None
 
     # ---------------------------------------------------------
     # Structured fields
     # ---------------------------------------------------------
-    keywords_json: Tuple[str, ...] = field(default_factory=tuple)
+    keywords: Tuple[str, ...] = field(default_factory=tuple)
 
     # ---------------------------------------------------------
     # Factory

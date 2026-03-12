@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 # Internal application imports
 # ---------------------------------------------------------------------
 from application.ports.category_repository import CategoryRepository
-from application.ports.category_profile_repository import CategoryProfileRepository
 from application.ports.embedding_repository import EmbeddingRepository
 from application.ports.embedding_service import EmbeddingService
 
@@ -23,10 +22,6 @@ from application.use_cases.categories.load_categories import (
 from application.use_cases.embeddings.load_embeddings import (
     LoadEmbeddingsUseCase,
     LoadEmbeddingsCommand,
-)
-from application.use_cases.category_profiles.load_profiles import (
-    LoadCategoryProfilesUseCase,
-    LoadCategoryProfilesCommand,
 )
 
 from application.ports.llm_service import LLMService
@@ -39,8 +34,8 @@ from application.ports.prompt_service import PromptService
 @dataclass
 class LoadCategoriesFromFileCommand:
     file_path: str
-    business: str = ""  # Business name to apply to all profiles
-    brand: bool = False  # If True, use sheet name as brand
+    business: str       # Business name to apply to all profiles
+    brand: bool = False # If True, use sheet name as brand
 
 
 # ---------------------------------------------------------------------
@@ -59,7 +54,6 @@ class LoadCategoriesFromFileUseCase:
         self,
         session: Session,
         category_repository: CategoryRepository,
-        profiles_repository: CategoryProfileRepository,
         embedding_repository: EmbeddingRepository,
         embedding_service: EmbeddingService,
         llm_service: LLMService,
@@ -77,11 +71,6 @@ class LoadCategoriesFromFileUseCase:
             session=session,
             embedding_repository=embedding_repository,
             embedding_service=embedding_service,
-        )
-
-        self.load_profiles_use_case = LoadCategoryProfilesUseCase(
-            session=session,
-            profiles_repository=profiles_repository,
         )
 
         self.llm_service = llm_service
@@ -110,6 +99,7 @@ class LoadCategoriesFromFileUseCase:
             sheet_categories: dict = self.load_categories_use_case.execute(
                 LoadCategoriesCommand(
                     file_path=cmd.file_path,
+                    business=cmd.business
                 )
             )
 
@@ -156,26 +146,14 @@ class LoadCategoriesFromFileUseCase:
                 LoadEmbeddingsCommand(categories=categories)
             )
 
-            # Step 3: Create profiles with metadata
-            print("\n" + "="*60)
-            print("STEP 3: Creating Profiles")
-            print("="*60)
-            profiles = self.load_profiles_use_case.execute(
-                LoadCategoryProfilesCommand(
-                    categories_by_sheet=sheet_categories,
-                    metadata=metadata
-                )
-            )
-
             print("\n" + "="*60)
             print("COMPLETED SUCCESSFULLY")
             print("="*60)
-            print(f"Total: {len(categories)} categories, {len(embeddings)} embeddings, {len(profiles)} profiles")
+            print(f"Total: {len(categories)} categories, {len(embeddings)} embeddings")
 
             return {
                 "categories": categories,
                 "embeddings": embeddings,
-                "profiles": profiles,
             }
 
         except Exception as e:

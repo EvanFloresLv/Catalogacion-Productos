@@ -413,5 +413,5 @@ if __name__ == "__main__":
     # test_unique_hashes()
     # test_constraints()
     # test_elegibility_policy()
-    # test_load_tree_policy()
-    test_create_product()
+    test_load_tree_policy()
+    # test_create_product()
