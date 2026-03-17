@@ -13,16 +13,6 @@ from typing import Set
 
 
 class BrandBusinessPolicy:
-    """
-    Business policy for brand exclusions by business type.
-
-    Defines which brands are excluded from certain business operations.
-    All brand comparisons are case-insensitive.
-
-    Business channels:
-    - Suburbia: ~80 excluded brands (premium athletic, designer, fashion)
-    - Liverpool: ~25 excluded brands (luxury, designer, specialty retail)
-    """
 
     # Brands excluded from Suburbia (stored in uppercase for consistency)
     SUBURBIA_EXCLUDED_BRANDS: Set[str] = {
@@ -130,24 +120,7 @@ class BrandBusinessPolicy:
 
     @classmethod
     def is_brand_excluded_from_business(cls, brand: str | None, business: str) -> bool:
-        """
-        Check if a brand is excluded from a specific business.
 
-        Args:
-            brand: Brand name to check (case-insensitive)
-            business: Business type (e.g., "suburbia", "liverpool")
-
-        Returns:
-            bool: True if the brand is excluded from the business
-
-        Examples:
-            >>> BrandBusinessPolicy.is_brand_excluded_from_business("adidas", "suburbia")
-            True
-            >>> BrandBusinessPolicy.is_brand_excluded_from_business("COACH", "liverpool")
-            True
-            >>> BrandBusinessPolicy.is_brand_excluded_from_business("nike", "suburbia")
-            False
-        """
         if not brand:
             return False
 
@@ -164,22 +137,7 @@ class BrandBusinessPolicy:
 
     @classmethod
     def get_excluded_brands_for_business(cls, business: str) -> Set[str]:
-        """
-        Get all brands excluded for a specific business.
 
-        Args:
-            business: Business type
-
-        Returns:
-            Set[str]: Set of excluded brand names (uppercase)
-
-        Examples:
-            >>> brands = BrandBusinessPolicy.get_excluded_brands_for_business("suburbia")
-            >>> len(brands) > 0
-            True
-            >>> "ADIDAS" in brands
-            True
-        """
         business_normalized = business.strip().lower()
 
         if business_normalized == "suburbia":
@@ -192,22 +150,7 @@ class BrandBusinessPolicy:
 
     @classmethod
     def get_allowed_businesses_for_brand(cls, brand: str) -> Set[str]:
-        """
-        Get all businesses where a brand is allowed (not excluded).
 
-        Args:
-            brand: Brand name (case-insensitive)
-
-        Returns:
-            Set[str]: Set of business types where brand is allowed
-
-        Examples:
-            >>> allowed = BrandBusinessPolicy.get_allowed_businesses_for_brand("ADIDAS")
-            >>> "suburbia" not in allowed
-            True
-            >>> "liverpool" in allowed
-            True
-        """
         if not brand:
             return {"suburbia", "liverpool"}
 

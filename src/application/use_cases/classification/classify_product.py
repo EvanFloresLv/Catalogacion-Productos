@@ -14,11 +14,14 @@ from typing import List
 from application.ports.product_repository import ProductRepository
 from application.ports.embedding_service import EmbeddingService
 from application.ports.embedding_repository import EmbeddingRepository
+from application.ports.category_repository import CategoryRepository
 from application.ports.category_profile_repository import CategoryProfileRepository
 
 from domain.entities.categories.category_constraints import CategoryConstraints
 from domain.entities.classification.result import ClassificationResult, CategoryMatch
 from domain.entities.classification.errors import NoEligibleMatchesError
+
+from domain.specifications.brand_business_policy import BrandBusinessPolicy
 
 
 @dataclass(frozen=True)
@@ -33,10 +36,12 @@ class ClassifyProductUseCase:
         self,
         products: ProductRepository,
         profiles: CategoryProfileRepository,
+        categories: CategoryRepository,
         embeddings: EmbeddingRepository,
         embeddings_service: EmbeddingService,
     ):
         self.products = products
+        self.categories = categories
         self.profiles = profiles
         self.embeddings = embeddings
         self.embeddings_service = embeddings_service
@@ -44,91 +49,101 @@ class ClassifyProductUseCase:
 
     def execute(self, cmd: ClassifyProductCommand) -> List[ClassificationResult]:
 
-        # Get product by SKU
-        product = self.products.get_by_sku(cmd.product_sku)
+        try:
+            product = self.products.get_by_sku(cmd.product_sku)
+            if not product:
+                raise ValueError(f"Product with SKU {cmd.product_sku} not found.")
 
-        if not product:
-            raise ValueError(f"Product with SKU {cmd.product_sku} not found.")
+            query_vector = self.embeddings_service.generate(product.to_embedding_text())
 
-        results = []
+            valid_businesses = []
+            for business in product.business:
+                if product.brand:
+                    business_black_list = BrandBusinessPolicy.get_excluded_brands_for_business(business)
 
-        for business in product.business:
-            # Create constraints from product attributes for current business
-            constraints = CategoryConstraints.create(
-                gender=product.gender,
-                business=business,
-                direction=product.direction,
-                brand=product.brand
-            )
+                    if str(product.brand).strip().upper() in business_black_list:
+                        continue
 
-            print(f"\n{'='*50}")
-            print(f"Processing business: {business}")
-            print(f"{'='*50}")
-            print("Product constraints:")
-            print(f"  - SKU: {product.sku}")
-            print(f"  - Gender: {product.gender}")
-            print(f"  - Business: {business}")
-            print(f"  - Direction: {product.direction}")
-            print(f"  - Brand: {product.brand}")
+                valid_businesses.append(business)
 
-            # Get profiles that match the product constraints
-            matching_profiles = self.profiles.get_profiles_by_constraints(
-                constraints=constraints
-            )
+            print(f"\nValid business: {valid_businesses}")
 
-            print(f"\nMatching profiles found: {len(matching_profiles)}")
+            if not valid_businesses:
+                raise NoEligibleMatchesError(
+                    f"Brand '{product.brand}' is excluded from all businesses: {product.business}"
+                )
 
-            # Extract category IDs from matching profiles
-            allowed_category_ids = {profile.category.id for profile in matching_profiles}
+            results = []
 
-            if not allowed_category_ids:
-                # Show helpful error message
-                print(f"\nWARNING: No categories match the product constraints for business '{business}'")
-                print(f"  gender={product.gender}, business={business}, "
-                      f"direction={product.direction}, brand={product.brand}")
-                print("Skipping this business and continuing with next...\n")
-                continue
+            for business in valid_businesses:
 
-            # Generate semantic hash from product
-            query_product = self.embeddings_service.generate(product.to_embedding_text())
+                constraints = CategoryConstraints.create(
+                    gender=product.gender,
+                    business=business,
+                    direction=product.direction,
+                    brand=product.brand,
+                    is_leaf=True,  # Only consider leaf categories for product classification
+                )
 
-            # Search for similar embeddings
-            raw_results = self.embeddings.search_similar(
-                query_vector=query_product,
-                category_ids=allowed_category_ids,
-                limit=cmd.top_k * 3  # Get more results for filtering
-            )
+                matching_profiles = self.profiles.get_profiles_by_constraints(constraints)
 
-            # Extract category IDs and scores from embedding results
-            # raw_results is List[Tuple[Embedding, float]]
-            filtered = [
-                (embedding.category_id, abs(score))
-                for embedding, score in raw_results
-                if embedding.category_id in allowed_category_ids
-            ]
+                if not matching_profiles:
+                    continue
 
-            if not filtered:
-                print(f"\nWARNING: No eligible matches found after filtering for business '{business}'")
-                print("Skipping this business and continuing with next...\n")
-                continue
+                allowed_category_ids = {p.category.id for p in matching_profiles}
 
-            # Get top K results
-            filtered = filtered[:cmd.top_k]
-            best_id, best_score = filtered[0]
+                raw_results = self.embeddings.search_similar(
+                    query_vector=query_vector,
+                    category_ids=allowed_category_ids,
+                    limit=cmd.top_k
+                )
 
-            results.append(ClassificationResult(
-                product_sku=product.sku,
-                best=CategoryMatch(category_id=best_id, score=float(best_score)),
-                top_k=[
-                    CategoryMatch(category_id=cid, score=float(score))
-                    for cid, score in filtered
-                ],
-            ))
+                if not raw_results:
+                    continue
 
-        # If no results were generated for any business, raise an error
-        if not results:
-            raise NoEligibleMatchesError(
-                f"No eligible matches found for product {product.sku} across all businesses: {product.business}"
-            )
+                top_k = [
+                    CategoryMatch(
+                        category_id=embedding.category_id,
+                        score=float(abs(score)),
+                        path=self._build_category_path(embedding.category_id)
+                    )
+                    for embedding, score in raw_results[:cmd.top_k]
+                ]
 
-        return results
+                results.append(ClassificationResult(
+                    product_sku=product.sku,
+                    best=top_k[0],
+                    top_k=top_k
+                ))
+
+            if not results:
+                raise NoEligibleMatchesError(
+                    f"No eligible matches found for product {product.sku}"
+                )
+
+            return results
+        except Exception as e:
+            print(f"Error occurred while classifying product {cmd.product_sku}:")
+            print(str(e))
+            return []
+
+    def _build_category_path(self, category_id: str) -> str:
+
+        path_parts = []
+        current_id = category_id
+        max_depth = 10  # Prevent infinite loops
+        depth = 0
+
+        while current_id and depth < max_depth:
+            category = self.categories.get_by_id(current_id)
+            if not category:
+                break
+
+            path_parts.append(category.name)
+            current_id = category.parent_id
+            depth += 1
+
+        # Reverse to get root to leaf order
+        path_parts.reverse()
+
+        return " > ".join(path_parts)

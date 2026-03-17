@@ -333,8 +333,8 @@ def test_elegibility_policy():
 
 def test_load_tree_policy():
     cmd = LoadCategoriesFromFileCommand(
-        file_path="./data/test.xlsx",
-        business="Suburbia",
+        file_path="./data/LiverpoolTest.xlsx",
+        business="Liverpool",
         brand=False,  # Use sheet names as brand names and apply brand business policy
     )
 
@@ -365,13 +365,13 @@ def test_create_product():
     products = [
         {
             "sku": "00-00-00",
-            "name": "Test Product Name",
-            "description": "Product for testing.",
-            "keywords": ["test", "product"],
+            "name": "Polvo saborizante",
+            "description": "Polvo de sabor para bebidas preparadas.",
+            "keywords": ["bebida", "polvo", "conjunto"],
             "product_type": "marketplace",
             "gender": None,
-            "brand": "Test Brand",  # Changed from 'brand' to 'brands'
-            "direction": "alimentos y bebidas",
+            "brand": "generic",  # Changed from 'brand' to 'brands'
+            "direction": "vinos y gourmet",
         },
         {
             "sku": "00-00-01",
@@ -380,8 +380,8 @@ def test_create_product():
             "keywords": ["test", "product"],
             "product_type": "marketplace",
             "gender": None,
-            "brand": "Test Brand",  # Changed from 'brand' to 'brands'
-            "direction": "alimentos y bebidas",
+            "brand": "generic",  # Changed from 'brand' to 'brands'
+            "direction": "vinos y gourmet",
         }
     ]
     cmd = CreateProductCommand(
@@ -421,12 +421,14 @@ def test_classification_product():
         product_repository = pg.ProductRepositoryPG(session)
         category_profile_repository = pg.CategoryProfileRepositoryPG(session)
         embedding_repository = pg.EmbeddingRepositoryPG(session, expected_dimension=768)
+        categories_repository = pg.CategoryRepositoryPG(session)
         embedding_service = EmbeddingClient(embedding_dim=768)
 
         use_case = ClassifyProductUseCase(
             products=product_repository,
             profiles=category_profile_repository,
             embeddings=embedding_repository,
+            categories=categories_repository,
             embeddings_service=embedding_service,
         )
 
@@ -443,6 +445,7 @@ def test_classification_product():
             print(" - Top K matches:")
             for match in result.top_k:
                 print(f"   - Category ID: {match.category_id}, Score: {match.score:.4f}")
+                print(f"     Path: {match.path}")
 
         print("\n" + "="*60)
 

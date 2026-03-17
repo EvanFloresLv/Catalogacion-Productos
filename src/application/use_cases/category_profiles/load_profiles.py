@@ -104,7 +104,9 @@ class LoadCategoryProfilesUseCase:
 
         # Create profiles for all categories
         all_profiles = []
+
         for sheet_name, sheet_data in cmd.categories_by_sheet.items():
+            max_level = max([category.level for category in sheet_data.get("categories", [])])
             categories = sheet_data.get("categories", [])
 
             for category in categories:
@@ -119,6 +121,7 @@ class LoadCategoryProfilesUseCase:
                 profile = self._create_profile(
                     category=category,
                     sheet_name=sheet_name,
+                    is_leaf=category.level == max_level,
                     category_metadata=category_metadata,
                     global_business=global_business,
                     is_brand_mode=is_brand_mode,
@@ -137,6 +140,7 @@ class LoadCategoryProfilesUseCase:
         self,
         category: Category,
         sheet_name: str,
+        is_leaf: bool,
         category_metadata: Dict[str, Optional[str]],
         global_business: Optional[str],
         is_brand_mode: bool,
@@ -177,6 +181,7 @@ class LoadCategoryProfilesUseCase:
 
         # Create constraints with all fields
         constraints = CategoryConstraints.create(
+            is_leaf=is_leaf,
             gender=gender,
             business=business,
             brand=brand,

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 class CategoryMatch:
     category_id: str
     score: float
+    path: str | None = None
 
 
 @dataclass(frozen=True)

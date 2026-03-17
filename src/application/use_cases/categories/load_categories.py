@@ -73,9 +73,7 @@ class LoadCategoriesUseCase:
 
         parsed_results = []
 
-        # -----------------------------
         # Stage 1 — Parallel sheet parsing
-        # -----------------------------
         with ThreadPoolExecutor(max_workers=self.SHEET_WORKERS) as executor:
             futures = {
                 executor.submit(self._process_sheet, xls, sheet): sheet
@@ -89,9 +87,7 @@ class LoadCategoriesUseCase:
                 except Exception as e:
                     print(f"Error processing sheet {sheet_name}: {e}")
 
-        # -----------------------------
         # Stage 2 — Sequential commit
-        # -----------------------------
         for sheet_name, categories in parsed_results:
 
             if not categories:
@@ -120,20 +116,17 @@ class LoadCategoriesUseCase:
 
         return all_categories
 
-    # =============================================================
-    # SHEET PROCESSING
-    # =============================================================
+    # Sheet processing
     def _process_sheet(
         self,
         xls: pd.ExcelFile,
         sheet_name: str,
-        use_brand: bool = False,
     ) -> List[Category]:
-        """Process a single sheet and return parsed categories."""
 
         print(f"Processing sheet: {sheet_name}")
 
-        df = self._prepare_dataframe(xls, sheet_name)
+        df: pd.DataFrame | None = self._prepare_dataframe(xls, sheet_name)
+
         if df is None:
             return []
 
@@ -149,6 +142,7 @@ class LoadCategoriesUseCase:
             category = self._parse_row(
                 row_dict,
                 last_inserted,
+                max_level=[c.lower() for c in df.columns].index("catid")
             )
             if not category:
                 continue
@@ -161,15 +155,12 @@ class LoadCategoriesUseCase:
 
         return categories
 
-    # =============================================================
-    # DATAFRAME PREPARATION
-    # =============================================================
+    # Dataframe preparation
     def _prepare_dataframe(
         self,
         xls: pd.ExcelFile,
         sheet_name: str,
     ) -> pd.DataFrame | None:
-        """Prepare and validate DataFrame from Excel sheet."""
 
         df = pd.read_excel(xls, sheet_name=sheet_name)
 
@@ -192,13 +183,15 @@ class LoadCategoriesUseCase:
 
         df.columns = levels + remaining
 
+        df.dropna(axis=1, how="all", inplace=True)
+
         return df
 
     # =============================================================
     # ROW PARSING
     # =============================================================
     def _clean_row(self, row: pd.Series) -> Dict[str, Any]:
-        """Clean and normalize row data."""
+
         return {
             str(k).strip(): v
             for k, v in row.to_dict().items()
@@ -209,8 +202,8 @@ class LoadCategoriesUseCase:
         self,
         row_dict: Dict[str, Any],
         last_inserted: Dict[int, str],
+        max_level: int
     ) -> Category | None:
-        """Parse a single row into a Category entity."""
 
         level_key = self._find_key(row_dict, "level")
         id_key = self._find_key(row_dict, "catid")
@@ -254,12 +247,9 @@ class LoadCategoriesUseCase:
 
         return category
 
-    # =============================================================
-    # HELPERS
-    # =============================================================
+    # Helpers
     @staticmethod
     def _find_key(data: Dict[str, Any], keyword: str) -> str | None:
-        """Find a key in dictionary by keyword (case-insensitive)."""
         return next(
             (k for k in data.keys() if keyword in k.lower()),
             None,
@@ -267,13 +257,11 @@ class LoadCategoriesUseCase:
 
     @staticmethod
     def _extract_level(key: str) -> int | None:
-        """Extract level number from key string."""
         match = re.search(r"\d+", key)
         return int(match.group()) if match else None
 
     @staticmethod
     def _clean_text(text: Any) -> str:
-        """Clean and normalize text content."""
         text = unicodedata.normalize("NFKD", str(text))
         text = re.sub(r"http\S+|www\S+|https\S+", "", text)
         text = re.sub(r"\S*\.com\S*", "", text)
@@ -286,7 +274,6 @@ class LoadCategoriesUseCase:
         descripcion: str,
         palabras: Any,
     ) -> List[str]:
-        """Extract and normalize keywords from various sources."""
 
         pattern = r"[A-Za-zÁÉÍÓÚáéíóúÑñ]+"
         extracted = []
@@ -310,7 +297,6 @@ class LoadCategoriesUseCase:
 
     @staticmethod
     def _validate_parent_integrity(categories: List[Category]) -> None:
-        """Validate that all parent categories exist in the list."""
         ids_set = {c.id for c in categories}
 
         for cat in categories:
@@ -324,21 +310,17 @@ class LoadCategoriesUseCase:
     def _deduplicate_categories(
         categories: List[Category],
     ) -> List[Category]:
-        """Remove duplicate categories by ID."""
         unique = {}
         for c in categories:
             unique[c.id] = c
         return list(unique.values())
 
-    # =============================================================
-    # TRANSACTION
-    # =============================================================
+    # Transaction
     def _commit_sheet(
         self,
         sheet_name: str,
         categories: List[Category],
     ) -> List[Category]:
-        """Save categories to database within a transaction."""
 
         try:
             saved = self.category_repository.save_batch(categories)

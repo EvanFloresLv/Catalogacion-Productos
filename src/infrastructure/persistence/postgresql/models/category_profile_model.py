@@ -28,6 +28,8 @@ class CategoryProfileModel(Base):
         primary_key=True,
     )
 
+    is_leaf: Mapped[bool] = mapped_column(nullable=False)
+
     gender: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,

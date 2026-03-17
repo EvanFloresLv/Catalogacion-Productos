@@ -170,8 +170,6 @@ class LLMClient(LLMService):
 
 
     def _generate(self, prompt: Dict[str, Any], **kwargs) -> str:
-        """Generate response from Gemini."""
-
         # Build contents from prompt
         contents = self._prompt_to_contents(prompt)
 
