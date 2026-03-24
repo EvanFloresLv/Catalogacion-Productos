@@ -2,6 +2,8 @@ from infrastructure.embeddings.gemini.client import EmbeddingClient
 
 import domain as dom
 import application as app
+import infrastructure as infra
+
 import infrastructure.persistence.postgresql as pg
 from domain.specifications.eligibility_policy import CategoryEligibilityPolicy
 
@@ -333,9 +335,10 @@ def test_elegibility_policy():
 
 def test_load_tree_policy():
     cmd = LoadCategoriesFromFileCommand(
-        file_path="./data/LiverpoolTest.xlsx",
-        business="Liverpool",
-        brand=False,  # Use sheet names as brand names and apply brand business policy
+        file_path="./data/Suburbia.xlsx",
+        business="Suburbia",
+        by_sheet=False,
+        brand=False,
     )
 
     with SessionLocal() as session:
@@ -364,24 +367,14 @@ def test_create_product():
 
     products = [
         {
-            "sku": "00-00-00",
-            "name": "Polvo saborizante",
-            "description": "Polvo de sabor para bebidas preparadas.",
-            "keywords": ["bebida", "polvo", "conjunto"],
+            "sku": "1193915848",
+            "name": "Máscara Cameraman Baños Skibidi",
+            "description": "Máscara para disfraz de Cameraman Baños Skibidi Ghoulish Productions.",
+            "keywords": ["máscara", "disfraz", "cameraman", "baños"],
             "product_type": "marketplace",
             "gender": None,
-            "brand": "generic",  # Changed from 'brand' to 'brands'
-            "direction": "vinos y gourmet",
-        },
-        {
-            "sku": "00-00-01",
-            "name": "Test Product Name 2",
-            "description": "Product for testing 2.",
-            "keywords": ["test", "product"],
-            "product_type": "marketplace",
-            "gender": None,
-            "brand": "generic",  # Changed from 'brand' to 'brands'
-            "direction": "vinos y gourmet",
+            "brand": "GHOULISH PRODUCTIONS",  # Changed from 'brand' to 'brands'
+            "direction": "hogar",
         }
     ]
     cmd = CreateProductCommand(
@@ -412,7 +405,7 @@ def test_create_product():
 
 def test_classification_product():
     cmd = ClassifyProductCommand(
-        product_sku="00-00-00",
+        product_sku="1193915848",
         top_k=5
     )
 
@@ -449,6 +442,17 @@ def test_classification_product():
 
         print("\n" + "="*60)
 
+def test_get_profiles():
+
+    with SessionLocal() as session:
+
+        profiles = infra.CategoryProfileRepositoryPG(session=session)
+
+        data = profiles.get_profiles_by_constraints(limit=10)
+
+        print("\nRetrieved profiles with constraints:")
+        for profile in data:
+            print(f" - ID: {profile.category.id}, Name: {profile.category.name}, Direction: {profile.direction}, Brand: {profile.brand}, Is Leaf: {profile.is_leaf}")
 
 if __name__ == "__main__":
     # test_embedding_generation()
@@ -456,6 +460,7 @@ if __name__ == "__main__":
     # test_unique_hashes()
     # test_constraints()
     # test_elegibility_policy()
-    # test_load_tree_policy()
-    test_create_product()
-    test_classification_product()
+    test_load_tree_policy()
+    # test_create_product()
+    # test_classification_product()
+    # test_get_profiles()

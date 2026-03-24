@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.categories.category import Category
-from domain.entities.categories.category_constraints import CategoryConstraints
 from domain.entities.categories.category_profile import CategoryProfile
 from application.ports.category_profile_repository import CategoryProfileRepository
 
@@ -179,18 +178,14 @@ class LoadCategoryProfilesUseCase:
             if gender or direccion:
                 print(f"  ✓ Metadata applied: {category.id} -> gender={gender}, direccion={direccion}")
 
-        # Create constraints with all fields
-        constraints = CategoryConstraints.create(
+        # Create profile with all constraint fields
+        return CategoryProfile.create(
+            category=category,
             is_leaf=is_leaf,
             gender=gender,
             business=business,
             brand=brand,
-            direction=direccion
-        )
-
-        return CategoryProfile.create(
-            category=category,
-            constraints=constraints,
+            direction=direccion,
         )
 
     # =============================================================

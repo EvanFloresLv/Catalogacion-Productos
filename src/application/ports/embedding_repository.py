@@ -33,14 +33,14 @@ class EmbeddingRepository(ABC):
 
     @abstractmethod
     def get_by_category_id(
-        self, category_id: UUID
+        self, category_id: str
     ) -> Optional[Embedding]:
         raise NotImplementedError
 
 
     @abstractmethod
     def get_by_category_ids(
-        self, category_ids: list[UUID]
+        self, category_ids: list[str]
     ) -> list[Embedding]:
         raise NotImplementedError
 

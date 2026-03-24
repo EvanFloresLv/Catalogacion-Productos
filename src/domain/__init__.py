@@ -1,7 +1,6 @@
 # Entities
 from .entities.categories.category import Category
 from .entities.categories.category_profile import CategoryProfile
-from .entities.categories.category_constraints import CategoryConstraints
 from .entities.categories.category_exception import CategoryException
 from .entities.categories.errors import CategoryError, CategoryNameError, CategoryDuplicateSemanticContentError
 
@@ -24,7 +23,6 @@ from .value_objects.semantic_hash import SemanticHash
 __all__ = [
    "Category",
    "CategoryProfile",
-   "CategoryConstraints",
    "CategoryException",
    "CategoryError",
    "CategoryNameError",

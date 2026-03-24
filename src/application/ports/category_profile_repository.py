@@ -11,7 +11,6 @@ from typing import Iterable
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.categories.category_constraints import CategoryConstraints
 from domain.entities.categories.category_profile import CategoryProfile
 
 
@@ -23,7 +22,10 @@ class CategoryProfileRepository(ABC):
 
 
     @abstractmethod
-    def get_profiles_by_constraints(self, constraints: CategoryConstraints) -> list[CategoryProfile]:
+    def get_profiles_by_constraints(
+        self,
+        **kwargs
+    ) -> list[CategoryProfile]:
         raise NotImplementedError
 
 

@@ -1,5 +1,4 @@
 from .categories.category import Category
-from .categories.category_constraints import CategoryConstraints
 from .categories.category_exception import CategoryException
 from .categories.errors import CategoryError, CategoryNameError, CategoryDuplicateSemanticContentError
 
@@ -15,7 +14,6 @@ from .embeddings.embedding import Embedding
 
 __all__ = [
     "Category",
-    "CategoryConstraints",
     "CategoryException",
     "CategoryError",
     "CategoryNameError",

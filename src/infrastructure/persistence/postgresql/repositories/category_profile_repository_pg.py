@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session, selectinload
 # ---------------------------------------------------------------------
 from domain.entities.categories.category import Category
 from domain.entities.categories.category_profile import CategoryProfile
-from domain.entities.categories.category_constraints import CategoryConstraints
 
 from application.ports.category_profile_repository import (
     CategoryProfileRepository,
@@ -120,29 +119,46 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
     # Constraint Matching
     # ============================================================
 
-    def get_profiles_by_constraints(
-        self,
-        constraints: CategoryConstraints,
-        limit: int | None = None,
-    ) -> list[CategoryProfile]:
+    def get_profiles_by_constraints(self, **kwargs) -> list[CategoryProfile]:
+
+        allowed_fields = {'gender', 'direction', 'brand', 'business', 'is_leaf', 'limit'}
+        for key in kwargs:
+            if key not in allowed_fields:
+                raise ValueError(f"Invalid constraint field: {key}")
+
+        constraint_fields = {
+            'gender': kwargs.get('gender', None),
+            'direction': kwargs.get('direction', None),
+            'brand': kwargs.get('brand', None),
+            'business': kwargs.get('business', None),
+            'is_leaf': kwargs.get('is_leaf', None),
+        }
+
+        limit = kwargs.get('limit', None)
 
         stmt = select(CategoryProfileModel).options(
             selectinload(CategoryProfileModel.category)
         )
 
         print("\n=== Querying profiles by constraints ===")
-        print(f"Constraints: gender={constraints.gender}, business={constraints.business}, "
-              f"direction={constraints.direction}, brand={constraints.brand}")
+        print(f"Constraints: gender={constraint_fields['gender']}, business={constraint_fields['business']}, "
+              f"direction={constraint_fields['direction']}, brand={constraint_fields['brand']}, is_leaf={constraint_fields['is_leaf']}")
 
-        for field in fields(CategoryConstraints):
-            value = getattr(constraints, field.name)
-            if value:
-                model_field = getattr(CategoryProfileModel, field.name)
 
-                print(f"  - Adding filter: {field.name} = '{value}' OR {field.name} IS NULL (wildcard)")
-                stmt = stmt.where(
-                    (model_field == value) | (model_field.is_(None))
-                )
+        for field_name, value in constraint_fields.items():
+            if value is not None:
+                model_field = getattr(CategoryProfileModel, field_name)
+
+                if isinstance(value, bool):
+                    # For boolean fields, exact match
+                    print(f"  - Adding filter: {field_name} = {value}")
+                    stmt = stmt.where(model_field == value)
+                else:
+                    # For string fields, match or NULL
+                    print(f"  - Adding filter: {field_name} = '{value}' OR {field_name} IS NULL")
+                    stmt = stmt.where(
+                        (model_field == value) | (model_field.is_(None))
+                    )
 
         stmt = stmt.order_by(CategoryProfileModel.category_id)
 
@@ -150,13 +166,6 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
             stmt = stmt.limit(limit)
 
         rows = self.session.execute(stmt).scalars().all()
-
-        print(f"Found {len(rows)} matching profiles")
-        if rows:
-            for row in rows[:5]:  # Show first 5
-                print(f"  - Profile: category_id={row.category_id}, gender={row.gender}, "
-                      f"business={row.business}, direction={row.direction}, brand={row.brand}")
-
         return [self._to_entity(r) for r in rows]
 
     # ============================================================
@@ -167,21 +176,16 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
     def _build_row(profile: CategoryProfile) -> dict:
         """
         Build dynamic insert row from CategoryProfile entity.
-        - business field is stored as an array
-        - other fields are stored as single string values
+        All constraint fields are stored directly on the profile.
         """
-
-        constraints = profile.constraints
-
-        row = {
+        return {
             "category_id": profile.category.id,
+            "gender": profile.gender,
+            "direction": profile.direction,
+            "brand": profile.brand,
+            "business": profile.business,
+            "is_leaf": profile.is_leaf,
         }
-
-        for field in fields(constraints):
-            value = getattr(constraints, field.name)
-            row[field.name] = value
-
-        return row
 
 
     @staticmethod
@@ -203,9 +207,6 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
     def _to_entity(model: CategoryProfileModel) -> CategoryProfile:
 
         category_field_names = {f.name for f in fields(Category)}
-        constraints_field_names = {
-            f.name for f in fields(CategoryConstraints)
-        }
 
         category_model = model.category
 
@@ -218,17 +219,12 @@ class CategoryProfileRepositoryPG(CategoryProfileRepository):
             }
         )
 
-        # Hydrate Constraints dynamically
-        # Handle business field as list, others as strings
-        constraint_data = {}
-        for field in constraints_field_names:
-            if hasattr(model, field):
-                value = getattr(model, field)
-                constraint_data[field] = value
-
-        constraints = CategoryConstraints(**constraint_data)
-
-        return CategoryProfile(
+        # Create CategoryProfile with constraint fields from model
+        return CategoryProfile.create(
             category=category,
-            constraints=constraints,
+            gender=model.gender,
+            direction=model.direction,
+            brand=model.brand,
+            business=model.business,
+            is_leaf=model.is_leaf,
         )

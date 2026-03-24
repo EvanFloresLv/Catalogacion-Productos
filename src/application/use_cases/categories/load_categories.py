@@ -27,7 +27,6 @@ from application.ports.category_repository import CategoryRepository
 @dataclass
 class LoadCategoriesCommand:
     file_path: str
-    brand: bool = False  # If True, use sheet name as brand for all categories in that sheet
 
 
 # ---------------------------------------------------------------------
@@ -53,21 +52,7 @@ class LoadCategoriesUseCase:
     # PUBLIC API
     # =============================================================
     def execute(self, cmd: LoadCategoriesCommand) -> List[Category]:
-        """
-        Load categories from Excel file and save to database.
 
-        Args:
-            cmd.file_path: Path to Excel file
-            cmd.brand: If True, use sheet name as brand for all categories
-
-        Returns dict with structure:
-            {
-                "sheet_name": {
-                    "categories": [Category, ...],
-                    "all_key_words": set(["keyword1", ...])
-                }
-            }
-        """
         xls = pd.ExcelFile(cmd.file_path)
         all_categories = {}
 
@@ -97,6 +82,9 @@ class LoadCategoriesUseCase:
 
             self._validate_parent_integrity(categories)
             categories = self._deduplicate_categories(categories)
+
+            # Enhance categories with keywords from their parent chain (excluding root)
+            categories = self._enhance_with_parent_keywords(categories)
 
             saved = self._commit_sheet(sheet_name, categories)
 
@@ -142,7 +130,6 @@ class LoadCategoriesUseCase:
             category = self._parse_row(
                 row_dict,
                 last_inserted,
-                max_level=[c.lower() for c in df.columns].index("catid")
             )
             if not category:
                 continue
@@ -202,7 +189,6 @@ class LoadCategoriesUseCase:
         self,
         row_dict: Dict[str, Any],
         last_inserted: Dict[int, str],
-        max_level: int
     ) -> Category | None:
 
         level_key = self._find_key(row_dict, "level")
@@ -315,7 +301,82 @@ class LoadCategoriesUseCase:
             unique[c.id] = c
         return list(unique.values())
 
-    # Transaction
+    def _enhance_with_parent_keywords(
+        self,
+        categories: List[Category],
+    ) -> List[Category]:
+
+        category_map = {cat.id: cat for cat in categories}
+
+        enhanced_categories = []
+
+        for cat in categories:
+            # Skip root categories - they don't get enhanced
+            if cat.level == 1:
+                enhanced_categories.append(cat)
+                continue
+
+            # Start with the category's own keywords
+            all_keywords = set(cat.keywords) if cat.keywords else set()
+            original_count = len(all_keywords)
+
+            # Collect keywords from parent chain (excluding root)
+            parent_keywords = self._collect_parent_keywords(
+                cat.parent_id,
+                category_map
+            )
+            all_keywords.update(parent_keywords)
+
+            # Create new category with enhanced keywords
+            enhanced_cat = Category.create(
+                id=cat.id,
+                name=cat.name,
+                level=cat.level,
+                parent_id=cat.parent_id,
+                description=cat.description,
+                url=cat.url,
+                keywords=tuple(sorted(all_keywords))  # Sort for consistency
+            )
+
+            enhanced_categories.append(enhanced_cat)
+
+            if len(all_keywords) > original_count:
+                print(f"  Enhanced '{cat.name}' (L{cat.level}): {original_count} → {len(all_keywords)} keywords")
+
+        return enhanced_categories
+
+    def _collect_parent_keywords(
+        self,
+        parent_id: str | None,
+        category_map: Dict[str, Category],
+    ) -> set[str]:
+
+        keywords = set()
+
+        # Base case: no parent or parent not found
+        if not parent_id or parent_id not in category_map:
+            return keywords
+
+        parent = category_map[parent_id]
+
+        # Stop at root level (level 1) - don't include root keywords
+        if parent.level == 1:
+            return keywords
+
+        # Add parent's keywords
+        if parent.keywords:
+            keywords.update(parent.keywords)
+
+        # Recursively get grandparent keywords
+        grandparent_keywords = self._collect_parent_keywords(
+            parent.parent_id,
+            category_map
+        )
+
+        keywords.update(grandparent_keywords)
+
+        return keywords
+
     def _commit_sheet(
         self,
         sheet_name: str,

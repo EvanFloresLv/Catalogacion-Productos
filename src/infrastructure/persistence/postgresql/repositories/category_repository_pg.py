@@ -87,18 +87,6 @@ class CategoryRepositoryPG(CategoryRepository):
         result = self.session.execute(stmt).scalar_one_or_none()
         return self._to_entity(result) if result else None
 
-    def get_by_ids(self, category_ids: list[UUID]) -> list[Category]:
-
-        if not category_ids:
-            return []
-
-        stmt = select(CategoryModel).where(
-            CategoryModel.id.in_(category_ids)
-        )
-
-        results = self.session.execute(stmt).scalars().all()
-        return self._to_entities(results)
-
     # ============================================================
     # Helpers
     # ============================================================

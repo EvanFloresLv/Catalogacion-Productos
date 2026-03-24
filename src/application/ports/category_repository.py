@@ -21,7 +21,6 @@ class CategoryRepository(ABC):
         self,
         category: Category
     ) -> None:
-        """Saves a category to the repository."""
         raise NotImplementedError
 
 
@@ -30,29 +29,17 @@ class CategoryRepository(ABC):
         self,
         categories: list[Category]
     ) -> None:
-        """Saves a batch of categories to the repository."""
         raise NotImplementedError
 
 
     @abstractmethod
     def get_all(self) -> list[Category]:
-        """Retrieves all categories from the repository."""
         raise NotImplementedError
 
 
     @abstractmethod
     def get_by_id(
         self,
-        category_id: UUID
+        category_id: str
     ) -> Category | None:
-        """Retrieves a category by its ID from the repository."""
-        raise NotImplementedError
-
-
-    @abstractmethod
-    def get_by_ids(
-        self,
-        category_ids: list[UUID]
-    ) -> list[Category]:
-        """Retrieves categories by their IDs from the repository."""
         raise NotImplementedError

@@ -17,7 +17,6 @@ from application.ports.embedding_repository import EmbeddingRepository
 from application.ports.category_repository import CategoryRepository
 from application.ports.category_profile_repository import CategoryProfileRepository
 
-from domain.entities.categories.category_constraints import CategoryConstraints
 from domain.entities.classification.result import ClassificationResult, CategoryMatch
 from domain.entities.classification.errors import NoEligibleMatchesError
 
@@ -51,6 +50,7 @@ class ClassifyProductUseCase:
 
         try:
             product = self.products.get_by_sku(cmd.product_sku)
+
             if not product:
                 raise ValueError(f"Product with SKU {cmd.product_sku} not found.")
 
@@ -77,15 +77,14 @@ class ClassifyProductUseCase:
 
             for business in valid_businesses:
 
-                constraints = CategoryConstraints.create(
+                # Query profiles with constraint parameters directly
+                matching_profiles = self.profiles.get_profiles_by_constraints(
                     gender=product.gender,
                     business=business,
                     direction=product.direction,
                     brand=product.brand,
                     is_leaf=True,  # Only consider leaf categories for product classification
                 )
-
-                matching_profiles = self.profiles.get_profiles_by_constraints(constraints)
 
                 if not matching_profiles:
                     continue
