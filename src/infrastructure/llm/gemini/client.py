@@ -17,7 +17,7 @@ from google.api_core import exceptions as google_exceptions
 # ---------------------------------------------------------------------
 from config.settings import gemini_settings
 from utils.circuit_breaker import CircuitBreaker
-from application.ports.llm_service import LLMService
+from domain.services.llm_service import LLMService
 from infrastructure.llm.errors import (
     TransientLLMError,
     ValidationLLMError,
@@ -179,12 +179,6 @@ class LLMClient(LLMService):
         if 'mime_type' in prompt and 'mime_type' not in kwargs:
             kwargs['mime_type'] = prompt['mime_type']
 
-        # Debug output
-        print(f"\n{'='*10} LLM | Client Debug {'='*10}")
-        print(f"Schema in kwargs: {kwargs.get('schema', 'NOT SET')}")
-        print(f"MIME type in kwargs: {kwargs.get('mime_type', 'NOT SET')}")
-        print(f"{'='*40}\n")
-
         config = self._build_config(**kwargs)
 
         response = self._client.models.generate_content(
@@ -192,8 +186,6 @@ class LLMClient(LLMService):
             contents=contents,
             config=config,
         )
-
-        print(f"Response: {response}")
 
         if not response.candidates:
             raise ProviderLLMError("No candidates in response")

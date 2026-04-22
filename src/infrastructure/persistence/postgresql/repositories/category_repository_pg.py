@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.categories.category import Category
-from application.ports.category_repository import CategoryRepository
+from domain.entities.category import Category
+from domain.repositories.category_repository import CategoryRepository
 from infrastructure.persistence.postgresql.models.category_model import (
     CategoryModel,
 )
@@ -56,22 +56,53 @@ class CategoryRepositoryPG(CategoryRepository):
         if not categories:
             return []
 
-        rows = [self._build_row(cat) for cat in categories]
+        # Sort by level so parents are inserted before children,
+        # preventing FK violations on the self-referencing parent_id.
+        sorted_cats = sorted(categories, key=lambda c: c.level)
 
-        stmt = insert(CategoryModel).values(rows)
+        all_results: list = []
+        for level_group in self._group_by_level(sorted_cats):
+            rows = [self._build_row(cat) for cat in level_group]
 
-        stmt = (
-            stmt.on_conflict_do_update(
-                constraint="uq_categories_id_semantic_hash",
-                set_=self._build_update_map(stmt),
+            stmt = insert(CategoryModel).values(rows)
+
+            stmt = (
+                stmt.on_conflict_do_update(
+                    constraint="uq_categories_id_semantic_hash",
+                    set_=self._build_update_map(stmt),
+                )
+                .returning(CategoryModel)
             )
-            .returning(CategoryModel)
-        )
 
-        results = self.session.execute(stmt).scalars().all()
-        self.session.flush()
+            results = self.session.execute(stmt).scalars().all()
+            self.session.flush()
+            all_results.extend(results)
 
-        return [self._to_entity(r) for r in results]
+        return [self._to_entity(r) for r in all_results]
+
+    @staticmethod
+    def _group_by_level(
+        sorted_categories: list[Category],
+    ) -> list[list[Category]]:
+        """Group a level-sorted list into sub-lists, one per level."""
+        if not sorted_categories:
+            return []
+
+        groups: list[list[Category]] = []
+        current_level = sorted_categories[0].level
+        current_group: list[Category] = []
+
+        for cat in sorted_categories:
+            if cat.level != current_level:
+                groups.append(current_group)
+                current_group = []
+                current_level = cat.level
+            current_group.append(cat)
+
+        if current_group:
+            groups.append(current_group)
+
+        return groups
 
     # ============================================================
     # Queries
@@ -87,16 +118,19 @@ class CategoryRepositoryPG(CategoryRepository):
         result = self.session.execute(stmt).scalar_one_or_none()
         return self._to_entity(result) if result else None
 
+    def get_by_ids(self, category_ids: list[str]) -> list[Category]:
+        if not category_ids:
+            return []
+        stmt = select(CategoryModel).where(CategoryModel.id.in_(category_ids))
+        results = self.session.execute(stmt).scalars().all()
+        return self._to_entities(results)
+
     # ============================================================
     # Helpers
     # ============================================================
 
     @staticmethod
     def _build_row(category: Category) -> dict:
-        """
-        Dynamically build persistence row from Category entity.
-        Excludes init=False fields automatically.
-        """
 
         row = {}
 

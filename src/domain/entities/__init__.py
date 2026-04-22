@@ -1,32 +1,14 @@
-from .categories.category import Category
-from .categories.category_exception import CategoryException
-from .categories.errors import CategoryError, CategoryNameError, CategoryDuplicateSemanticContentError
-
-from .classification.result import ClassificationResult, CategoryMatch
-from .classification.errors import ClassificationError, NoEligibleMatchesError, NoEligibleCategoriesError
-
-from .products.product import Product
-from .products.product_context import ProductContext
-from .products.product_category_exclusion import ProductCategoryExclusion
-from .products.errors import ProductError, ProductTitleError
-
-from .embeddings.embedding import Embedding
+from .category import Category
+from .category_profile import CategoryProfile
+from .embedding import Embedding
+from .product import Product
+from .result import ClassificationResult, CategoryMatch
 
 __all__ = [
     "Category",
-    "CategoryException",
-    "CategoryError",
-    "CategoryNameError",
-    "CategoryDuplicateSemanticContentError",
+    "CategoryProfile",
     "ClassificationResult",
     "CategoryMatch",
-    "ClassificationError",
-    "NoEligibleMatchesError",
-    "NoEligibleCategoriesError",
     "Product",
-    "ProductCategoryExclusion",
-    "ProductError",
-    "ProductContext",
-    "ProductTitleError",
-    "Embedding"
+    "Embedding",
 ]

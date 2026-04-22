@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.embeddings.embedding import Embedding
-from application.ports.embedding_repository import EmbeddingRepository
+from domain.entities.embedding import Embedding
+from domain.repositories.embedding_repository import EmbeddingRepository
 from infrastructure.persistence.postgresql.models.embedding_model import (
     EmbeddingModel,
 )

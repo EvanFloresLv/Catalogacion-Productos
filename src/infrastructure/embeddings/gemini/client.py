@@ -17,7 +17,7 @@ from google import genai
 # ---------------------------------------------------------------------
 from config.settings import gemini_settings
 from utils.circuit_breaker import CircuitBreaker
-from application.ports.embedding_service import EmbeddingService
+from domain.services.embedding_service import EmbeddingService
 from infrastructure.embeddings.errors import (
     TransientEmbeddingError,
     PermanentEmbeddingError,

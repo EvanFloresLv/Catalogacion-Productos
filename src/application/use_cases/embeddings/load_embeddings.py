@@ -5,17 +5,14 @@ from typing import List
 from dataclasses import dataclass
 
 # ---------------------------------------------------------------------
-# Third-party libraries
-# ---------------------------------------------------------------------
-from sqlalchemy.orm import Session
-
-# ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.categories.category import Category
-from domain.entities.embeddings.embedding import Embedding
-from application.ports.embedding_repository import EmbeddingRepository
-from application.ports.embedding_service import EmbeddingService
+from domain.entities.category import Category
+from domain.entities.embedding import Embedding
+from domain.repositories.embedding_repository import EmbeddingRepository
+from domain.services.embedding_service import EmbeddingService
+
+from shared.kernel.unit_of_work import UnitOfWork
 
 
 # ---------------------------------------------------------------------
@@ -32,7 +29,9 @@ class LoadEmbeddingsCommand:
 class LoadEmbeddingsUseCase:
     """
     Generates and persists embeddings for categories.
-    Handles parallel embedding generation and deduplication.
+
+    Architecture:
+      - Uses UnitOfWork for transactional commit + event dispatch
     """
 
     EMBEDDING_WORKERS = 4
@@ -40,13 +39,13 @@ class LoadEmbeddingsUseCase:
 
     def __init__(
         self,
-        session: Session,
         embedding_repository: EmbeddingRepository,
         embedding_service: EmbeddingService,
+        uow: UnitOfWork,
     ):
-        self.session = session
         self.embedding_repository = embedding_repository
         self.embedding_service = embedding_service
+        self.uow = uow
 
     # =============================================================
     # PUBLIC API
@@ -145,11 +144,10 @@ class LoadEmbeddingsUseCase:
 
         try:
             self.embedding_repository.save_batch(embeddings)
-            self.session.commit()
             print(f"✓ {len(embeddings)} embeddings saved")
             return embeddings
 
         except Exception as e:
-            self.session.rollback()
+            self.uow.rollback()
             print(f"✗ Rollback embeddings: {e}")
             raise

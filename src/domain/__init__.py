@@ -1,44 +1,33 @@
 # Entities
-from .entities.categories.category import Category
-from .entities.categories.category_profile import CategoryProfile
-from .entities.categories.category_exception import CategoryException
-from .entities.categories.errors import CategoryError, CategoryNameError, CategoryDuplicateSemanticContentError
+from .entities.category import Category
+from .entities.category_profile import CategoryProfile
 
-from .entities.classification.result import ClassificationResult, CategoryMatch
-from .entities.classification.errors import ClassificationError, NoEligibleMatchesError, NoEligibleCategoriesError
+from .entities.result import ClassificationResult, CategoryMatch
 
-from .entities.products.product import Product
-from .entities.products.product_context import ProductContext
-from .entities.products.product_category_exclusion import ProductCategoryExclusion
-from .entities.products.errors import ProductError, ProductTitleError
+from .entities.product import Product
 
-from .entities.embeddings.embedding import Embedding
+from .entities.embedding import Embedding
 
-# Specifications
-from .specifications.eligibility_policy import CategoryEligibilityPolicy
+# Aggregates
+from .aggregates.category_catalog import CategoryCatalog
+from .aggregates.product_classification import ProductClassification
 
 # Value objects
 from .value_objects.semantic_hash import SemanticHash
 
+# Factories
+from .factories import DomainFactory
+
 __all__ = [
    "Category",
    "CategoryProfile",
-   "CategoryException",
-   "CategoryError",
-   "CategoryNameError",
-   "CategoryDuplicateSemanticContentError",
    "ClassificationResult",
    "CategoryMatch",
-   "ClassificationError",
-   "NoEligibleMatchesError",
-   "NoEligibleCategoriesError",
    "Product",
-   "ProductCategoryExclusion",
-   "ProductError",
-   "ProductTitleError",
    "Embedding",
-   "CategoryEligibilityPolicy",
+   "CategoryCatalog",
+   "ProductClassification",
+   "BrandBusinessPolicy",
    "SemanticHash",
-   "ProductContext",
-   "ProductCategoryExclusion"
+   "DomainFactory",
 ]

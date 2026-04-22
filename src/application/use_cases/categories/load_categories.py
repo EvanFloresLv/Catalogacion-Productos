@@ -11,14 +11,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy.orm import Session
 import pandas as pd
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.categories.category import Category
-from application.ports.category_repository import CategoryRepository
+from domain.entities.category import Category
+from domain.repositories.category_repository import CategoryRepository
+from domain.aggregates.category_catalog import CategoryCatalog
+
+from shared.kernel.unit_of_work import UnitOfWork
 
 
 # ---------------------------------------------------------------------
@@ -35,28 +37,35 @@ class LoadCategoriesCommand:
 class LoadCategoriesUseCase:
     """
     Loads categories from an Excel file into the database.
-    Handles parsing, validation, and persistence of category entities.
+
+    Architecture:
+      - Uses CategoryCatalog aggregate for invariant enforcement
+      - Uses UnitOfWork for transactional commit + event dispatch
     """
 
     SHEET_WORKERS = 4
 
     def __init__(
         self,
-        session: Session,
         category_repository: CategoryRepository,
+        uow: UnitOfWork,
     ):
-        self.session = session
         self.category_repository = category_repository
+        self.uow = uow
 
     # =============================================================
     # PUBLIC API
     # =============================================================
-    def execute(self, cmd: LoadCategoriesCommand) -> List[Category]:
+    def execute(self, cmd: LoadCategoriesCommand) -> Dict[str, Any]:
 
         xls = pd.ExcelFile(cmd.file_path)
         all_categories = {}
 
         parsed_results = []
+
+        # Create aggregate for the whole catalog
+        catalog = CategoryCatalog()
+        self.uow.register(catalog)
 
         # Stage 1 — Parallel sheet parsing
         with ThreadPoolExecutor(max_workers=self.SHEET_WORKERS) as executor:
@@ -72,33 +81,51 @@ class LoadCategoriesUseCase:
                 except Exception as e:
                     print(f"Error processing sheet {sheet_name}: {e}")
 
-        # Stage 2 — Sequential commit
+        # Stage 2 — Add to aggregate and commit per sheet
         for sheet_name, categories in parsed_results:
 
             if not categories:
                 continue
 
-            print(f"Sheet: {sheet_name} | {len(categories)} categories")
-
-            self._validate_parent_integrity(categories)
             categories = self._deduplicate_categories(categories)
 
-            # Enhance categories with keywords from their parent chain (excluding root)
-            categories = self._enhance_with_parent_keywords(categories)
+            # Use aggregate for validation and keyword enhancement
+            catalog.add_categories_batch(categories)
 
-            saved = self._commit_sheet(sheet_name, categories)
+        # Enhance keywords via aggregate
+        catalog.enhance_keywords_from_parents()
 
-            if sheet_name not in all_categories.keys():
+        # Persist ALL categories sorted by level (parents before children)
+        # This avoids FK violations when a child in one sheet references
+        # a parent that was parsed from a different sheet.
+        all_enhanced = catalog.categories
+        all_enhanced_sorted = sorted(all_enhanced, key=lambda c: c.level)
+
+        # Build a lookup: category_id → sheet_name
+        cat_id_to_sheet: Dict[str, str] = {}
+        for sheet_name, categories in parsed_results:
+            for cat in categories:
+                cat_id_to_sheet[cat.id] = sheet_name
+
+        # Persist in level order (all at once)
+        saved_all = self._commit_sheet("ALL", all_enhanced_sorted)
+
+        # Distribute saved categories back into per-sheet buckets
+        for cat in saved_all:
+            sheet_name = cat_id_to_sheet.get(cat.id, "unknown")
+
+            if sheet_name not in all_categories:
                 all_categories[sheet_name] = {
                     "categories": [],
                     "all_key_words": set()
                 }
 
-            all_categories[sheet_name]["categories"].extend(saved)
-            # Flatten all keywords from all categories into the set
-            for cat in saved:
-                if cat.keywords:
-                    all_categories[sheet_name]["all_key_words"].update(cat.keywords)
+            all_categories[sheet_name]["categories"].append(cat)
+            if cat.keywords:
+                all_categories[sheet_name]["all_key_words"].update(cat.keywords)
+
+        # Commit UoW: persist events to outbox, dispatch handlers
+        self.uow.commit()
 
         print(f"\n\nTotal categories loaded: {len(all_categories)}")
 
@@ -110,8 +137,6 @@ class LoadCategoriesUseCase:
         xls: pd.ExcelFile,
         sheet_name: str,
     ) -> List[Category]:
-
-        print(f"Processing sheet: {sheet_name}")
 
         df: pd.DataFrame | None = self._prepare_dataframe(xls, sheet_name)
 
@@ -282,17 +307,6 @@ class LoadCategoriesUseCase:
         return list(dict.fromkeys(extracted))
 
     @staticmethod
-    def _validate_parent_integrity(categories: List[Category]) -> None:
-        ids_set = {c.id for c in categories}
-
-        for cat in categories:
-            if cat.parent_id and cat.parent_id not in ids_set:
-                raise ValueError(
-                    f"Missing parent {cat.parent_id} "
-                    f"for category {cat.id}"
-                )
-
-    @staticmethod
     def _deduplicate_categories(
         categories: List[Category],
     ) -> List[Category]:
@@ -300,82 +314,6 @@ class LoadCategoriesUseCase:
         for c in categories:
             unique[c.id] = c
         return list(unique.values())
-
-    def _enhance_with_parent_keywords(
-        self,
-        categories: List[Category],
-    ) -> List[Category]:
-
-        category_map = {cat.id: cat for cat in categories}
-
-        enhanced_categories = []
-
-        for cat in categories:
-            # Skip root categories - they don't get enhanced
-            if cat.level == 1:
-                enhanced_categories.append(cat)
-                continue
-
-            # Start with the category's own keywords
-            all_keywords = set(cat.keywords) if cat.keywords else set()
-            original_count = len(all_keywords)
-
-            # Collect keywords from parent chain (excluding root)
-            parent_keywords = self._collect_parent_keywords(
-                cat.parent_id,
-                category_map
-            )
-            all_keywords.update(parent_keywords)
-
-            # Create new category with enhanced keywords
-            enhanced_cat = Category.create(
-                id=cat.id,
-                name=cat.name,
-                level=cat.level,
-                parent_id=cat.parent_id,
-                description=cat.description,
-                url=cat.url,
-                keywords=tuple(sorted(all_keywords))  # Sort for consistency
-            )
-
-            enhanced_categories.append(enhanced_cat)
-
-            if len(all_keywords) > original_count:
-                print(f"  Enhanced '{cat.name}' (L{cat.level}): {original_count} → {len(all_keywords)} keywords")
-
-        return enhanced_categories
-
-    def _collect_parent_keywords(
-        self,
-        parent_id: str | None,
-        category_map: Dict[str, Category],
-    ) -> set[str]:
-
-        keywords = set()
-
-        # Base case: no parent or parent not found
-        if not parent_id or parent_id not in category_map:
-            return keywords
-
-        parent = category_map[parent_id]
-
-        # Stop at root level (level 1) - don't include root keywords
-        if parent.level == 1:
-            return keywords
-
-        # Add parent's keywords
-        if parent.keywords:
-            keywords.update(parent.keywords)
-
-        # Recursively get grandparent keywords
-        grandparent_keywords = self._collect_parent_keywords(
-            parent.parent_id,
-            category_map
-        )
-
-        keywords.update(grandparent_keywords)
-
-        return keywords
 
     def _commit_sheet(
         self,
@@ -385,11 +323,10 @@ class LoadCategoriesUseCase:
 
         try:
             saved = self.category_repository.save_batch(categories)
-            self.session.commit()
             print(f"✓ Sheet {sheet_name}: {len(saved)} categories saved")
             return saved
 
         except Exception as e:
-            self.session.rollback()
+            self.uow.rollback()
             print(f"✗ Rollback sheet {sheet_name}: {e}")
             raise

@@ -3,16 +3,11 @@
 # ---------------------------------------------------------------------
 from abc import ABC, abstractmethod
 from typing import Optional, List
-from uuid import UUID
-
-# ---------------------------------------------------------------------
-# Third-party libraries
-# ---------------------------------------------------------------------
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.embeddings.embedding import Embedding
+from domain.entities.embedding import Embedding
 
 
 class EmbeddingRepository(ABC):

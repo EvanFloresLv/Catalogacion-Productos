@@ -14,12 +14,10 @@ from sqlalchemy.orm import Session, selectinload
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.categories.category import Category
-from domain.entities.categories.category_profile import CategoryProfile
+from domain.entities.category import Category
+from domain.entities.category_profile import CategoryProfile
 
-from application.ports.category_profile_repository import (
-    CategoryProfileRepository,
-)
+from domain.repositories.category_profile_repository import CategoryProfileRepository
 
 from infrastructure.persistence.postgresql.models.category_profile_model import (
     CategoryProfileModel,

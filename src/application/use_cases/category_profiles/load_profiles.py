@@ -6,16 +6,13 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 # ---------------------------------------------------------------------
-# Third-party libraries
-# ---------------------------------------------------------------------
-from sqlalchemy.orm import Session
-
-# ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.categories.category import Category
-from domain.entities.categories.category_profile import CategoryProfile
-from application.ports.category_profile_repository import CategoryProfileRepository
+from domain.entities.category import Category
+from domain.entities.category_profile import CategoryProfile
+from domain.repositories.category_profile_repository import CategoryProfileRepository
+
+from shared.kernel.unit_of_work import UnitOfWork
 
 
 # ---------------------------------------------------------------------
@@ -33,15 +30,18 @@ class LoadCategoryProfilesCommand:
 class LoadCategoryProfilesUseCase:
     """
     Creates and persists category profiles with constraints.
+
+    Architecture:
+      - Uses UnitOfWork for transactional commit + event dispatch
     """
 
     def __init__(
         self,
-        session: Session,
         profiles_repository: CategoryProfileRepository,
+        uow: UnitOfWork,
     ):
-        self.session = session
         self.profiles_repository = profiles_repository
+        self.uow = uow
 
     # =============================================================
     # PUBLIC API
@@ -175,9 +175,6 @@ class LoadCategoryProfilesUseCase:
             gender = genero if genero and genero.lower() != "nulo" else None
             direccion = direccion_meta if direccion_meta and direccion_meta.lower() != "nulo" else None
 
-            if gender or direccion:
-                print(f"  ✓ Metadata applied: {category.id} -> gender={gender}, direccion={direccion}")
-
         # Create profile with all constraint fields
         return CategoryProfile.create(
             category=category,
@@ -209,11 +206,10 @@ class LoadCategoryProfilesUseCase:
     ) -> List[CategoryProfile]:
         try:
             saved = self.profiles_repository.save_batch(profiles)
-            self.session.commit()
             print(f"✓ {len(saved)} profiles saved")
             return saved
 
         except Exception as e:
-            self.session.rollback()
+            self.uow.rollback()
             print(f"✗ Rollback profiles: {e}")
             raise

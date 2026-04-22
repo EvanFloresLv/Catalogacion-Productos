@@ -2,16 +2,11 @@
 # Standard library
 # ---------------------------------------------------------------------
 from abc import ABC, abstractmethod
-from uuid import UUID
-
-# ---------------------------------------------------------------------
-# Third-party libraries
-# ---------------------------------------------------------------------
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.categories.category import Category
+from domain.entities.category import Category
 
 
 class CategoryRepository(ABC):

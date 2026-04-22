@@ -6,19 +6,16 @@ from dataclasses import dataclass
 from typing import Dict, Any, List
 
 # ---------------------------------------------------------------------
-# Third-party libraries
-# ---------------------------------------------------------------------
-from sqlalchemy.orm import Session
-
-# ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.category_repository import CategoryRepository
-from application.ports.category_profile_repository import CategoryProfileRepository
-from application.ports.embedding_repository import EmbeddingRepository
-from application.ports.embedding_service import EmbeddingService
-from application.ports.llm_service import LLMService
+from domain.repositories.category_repository import CategoryRepository
+from domain.repositories.category_profile_repository import CategoryProfileRepository
+from domain.repositories.embedding_repository import EmbeddingRepository
+from domain.services.embedding_service import EmbeddingService
+from domain.services.llm_service import LLMService
 from application.ports.prompt_service import PromptService
+
+from shared.kernel.unit_of_work import UnitOfWork
 
 from application.use_cases.categories.load_categories import (
     LoadCategoriesUseCase,
@@ -51,33 +48,40 @@ class LoadCategoriesFromFileCommand:
 # Use Case
 # ---------------------------------------------------------------------
 class LoadCategoriesFromFileUseCase:
+    """
+    Orchestrator use case that coordinates loading categories, embeddings, and profiles.
+
+    Architecture:
+      - Delegates to sub-use-cases, each receiving the shared UoW
+      - Final commit happens here in the orchestrator
+    """
 
     def __init__(
         self,
-        session: Session,
         category_repository: CategoryRepository,
         profiles_repository: CategoryProfileRepository,
         embedding_repository: EmbeddingRepository,
         embedding_service: EmbeddingService,
         llm_service: LLMService,
         prompt_service: PromptService,
+        uow: UnitOfWork,
     ):
-        self.session = session
+        self.uow = uow
 
         self.load_categories_uc = LoadCategoriesUseCase(
-            session=session,
             category_repository=category_repository,
+            uow=uow,
         )
 
         self.load_embeddings_uc = LoadEmbeddingsUseCase(
-            session=session,
             embedding_repository=embedding_repository,
             embedding_service=embedding_service,
+            uow=uow,
         )
 
         self.load_profiles_uc = LoadCategoryProfilesUseCase(
-            session=session,
             profiles_repository=profiles_repository,
+            uow=uow,
         )
 
         self.llm_service = llm_service
@@ -106,7 +110,7 @@ class LoadCategoriesFromFileUseCase:
             }
 
         except Exception:
-            self.session.rollback()
+            self.uow.rollback()
             raise
 
     # =============================================================

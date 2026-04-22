@@ -1,7 +1,6 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
-from uuid import UUID
 from dataclasses import fields
 
 # ---------------------------------------------------------------------
@@ -14,8 +13,8 @@ from sqlalchemy.orm import Session
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.products.product import Product
-from application.ports.product_repository import ProductRepository
+from domain.entities.product import Product
+from domain.repositories.product_repository import ProductRepository
 from infrastructure.persistence.postgresql.models.product_model import ProductModel
 
 

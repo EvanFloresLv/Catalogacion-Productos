@@ -5,22 +5,19 @@ from dataclasses import dataclass
 from typing import List
 
 # ---------------------------------------------------------------------
-# Third-party libraries
-# ---------------------------------------------------------------------
-
-# ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from application.ports.product_repository import ProductRepository
-from application.ports.embedding_service import EmbeddingService
-from application.ports.embedding_repository import EmbeddingRepository
-from application.ports.category_repository import CategoryRepository
-from application.ports.category_profile_repository import CategoryProfileRepository
+from domain.repositories.product_repository import ProductRepository
+from domain.repositories.embedding_repository import EmbeddingRepository
+from domain.services.embedding_service import EmbeddingService
 
-from domain.entities.classification.result import ClassificationResult, CategoryMatch
-from domain.entities.classification.errors import NoEligibleMatchesError
+from application.services.category_query_service import CategoryQueryService
+from application.dto.queries.category_queries import GetProfilesByConstraintsQuery
 
-from domain.specifications.brand_business_policy import BrandBusinessPolicy
+from domain.entities.result import ClassificationResult, CategoryMatch
+from domain.aggregates.product_classification import ProductClassification
+
+from shared.kernel.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True)
@@ -30,21 +27,28 @@ class ClassifyProductCommand:
 
 
 class ClassifyProductUseCase:
+    """
+    Classifies a product against eligible category profiles using embeddings.
+
+    Architecture:
+      - Uses CategoryQueryService (CQRS read-side) for profile and path queries
+      - Uses ProductClassification aggregate to enforce business rules
+      - Uses UnitOfWork to persist domain events
+    """
 
     def __init__(
         self,
         products: ProductRepository,
-        profiles: CategoryProfileRepository,
-        categories: CategoryRepository,
+        category_query_service: CategoryQueryService,
         embeddings: EmbeddingRepository,
         embeddings_service: EmbeddingService,
+        uow: UnitOfWork,
     ):
         self.products = products
-        self.categories = categories
-        self.profiles = profiles
+        self.category_query_service = category_query_service
         self.embeddings = embeddings
         self.embeddings_service = embeddings_service
-
+        self.uow = uow
 
     def execute(self, cmd: ClassifyProductCommand) -> List[ClassificationResult]:
 
@@ -54,37 +58,31 @@ class ClassifyProductUseCase:
             if not product:
                 raise ValueError(f"Product with SKU {cmd.product_sku} not found.")
 
+            # Build the aggregate
+            classification = ProductClassification(product)
+            self.uow.register(classification)
+
             query_vector = self.embeddings_service.generate(product.to_embedding_text())
 
-            valid_businesses = []
-            for business in product.business:
-                if product.brand:
-                    business_black_list = BrandBusinessPolicy.get_excluded_brands_for_business(business)
-
-                    if str(product.brand).strip().upper() in business_black_list:
-                        continue
-
-                valid_businesses.append(business)
+            # Delegate brand/business filtering to the aggregate
+            valid_businesses = classification.get_valid_businesses()
 
             print(f"\nValid business: {valid_businesses}")
-
-            if not valid_businesses:
-                raise NoEligibleMatchesError(
-                    f"Brand '{product.brand}' is excluded from all businesses: {product.business}"
-                )
 
             results = []
 
             for business in valid_businesses:
 
-                # Query profiles with constraint parameters directly
-                matching_profiles = self.profiles.get_profiles_by_constraints(
+                # CQRS read-side: query profiles by constraints
+                query = GetProfilesByConstraintsQuery(
                     gender=product.gender,
                     business=business,
                     direction=product.direction,
                     brand=product.brand,
-                    is_leaf=True,  # Only consider leaf categories for product classification
+                    is_leaf=True,
                 )
+
+                matching_profiles = self.category_query_service.get_profiles_by_constraints(query)
 
                 if not matching_profiles:
                     continue
@@ -93,8 +91,8 @@ class ClassifyProductUseCase:
 
                 raw_results = self.embeddings.search_similar(
                     query_vector=query_vector,
-                    category_ids=allowed_category_ids,
-                    limit=cmd.top_k
+                    category_ids=list(allowed_category_ids),
+                    limit=cmd.top_k,
                 )
 
                 if not raw_results:
@@ -104,45 +102,30 @@ class ClassifyProductUseCase:
                     CategoryMatch(
                         category_id=embedding.category_id,
                         score=float(abs(score)),
-                        path=self._build_category_path(embedding.category_id)
+                        path=self.category_query_service.build_category_path(embedding.category_id),
                     )
                     for embedding, score in raw_results[:cmd.top_k]
                 ]
 
-                results.append(ClassificationResult(
-                    product_sku=product.sku,
-                    best=top_k[0],
-                    top_k=top_k
-                ))
+                # Aggregate records the classification and emits event
+                result = classification.record_classification(
+                    business=business,
+                    top_k=top_k,
+                )
+                results.append(result)
 
             if not results:
-                raise NoEligibleMatchesError(
+                raise Exception(
                     f"No eligible matches found for product {product.sku}"
                 )
 
+            # Commit: persist events to outbox, dispatch handlers
+            self.uow.commit()
+
             return results
+
         except Exception as e:
+            self.uow.rollback()
             print(f"Error occurred while classifying product {cmd.product_sku}:")
             print(str(e))
             return []
-
-    def _build_category_path(self, category_id: str) -> str:
-
-        path_parts = []
-        current_id = category_id
-        max_depth = 10  # Prevent infinite loops
-        depth = 0
-
-        while current_id and depth < max_depth:
-            category = self.categories.get_by_id(current_id)
-            if not category:
-                break
-
-            path_parts.append(category.name)
-            current_id = category.parent_id
-            depth += 1
-
-        # Reverse to get root to leaf order
-        path_parts.reverse()
-
-        return " > ".join(path_parts)

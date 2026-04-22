@@ -11,7 +11,7 @@ from typing import Iterable
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.categories.category_profile import CategoryProfile
+from domain.entities.category_profile import CategoryProfile
 
 
 class CategoryProfileRepository(ABC):
