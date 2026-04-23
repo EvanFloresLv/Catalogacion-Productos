@@ -1,13 +1,6 @@
 # -----------------------------------------------------------------
 # Composition Root — Dependency Injection Factory
 # -----------------------------------------------------------------
-"""
-Wires all dependencies together following Clean Architecture rules:
-
-  Domain (inner) ← Application ← Infrastructure (outer) ← Interfaces
-
-This module is the ONLY place that knows about concrete implementations.
-"""
 from __future__ import annotations
 
 from typing import List, Optional

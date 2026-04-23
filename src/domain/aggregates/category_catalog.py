@@ -115,7 +115,6 @@ class CategoryCatalog(AggregateRoot):
                     level=cat.level,
                     parent_id=cat.parent_id,
                     description=cat.description,
-                    url=cat.url,
                     keywords=tuple(sorted(all_keywords)),
                 )
                 self._categories[cat.id] = new_cat

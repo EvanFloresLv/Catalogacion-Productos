@@ -6,7 +6,6 @@ import json
 import unicodedata
 from typing import List, Dict, Any
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -23,261 +22,142 @@ from domain.aggregates.category_catalog import CategoryCatalog
 from shared.kernel.unit_of_work import UnitOfWork
 
 
-# ---------------------------------------------------------------------
+# -------------------------------------------------------------
 # Command
-# ---------------------------------------------------------------------
+# -------------------------------------------------------------
 @dataclass
 class LoadCategoriesCommand:
     file_path: str
 
 
-# ---------------------------------------------------------------------
-# Use Case
-# ---------------------------------------------------------------------
+# -------------------------------------------------------------
+# Use Case (Simplified)
+# -------------------------------------------------------------
 class LoadCategoriesUseCase:
-    """
-    Loads categories from an Excel file into the database.
 
-    Architecture:
-      - Uses CategoryCatalog aggregate for invariant enforcement
-      - Uses UnitOfWork for transactional commit + event dispatch
-    """
-
-    SHEET_WORKERS = 4
-
-    def __init__(
-        self,
-        category_repository: CategoryRepository,
-        uow: UnitOfWork,
-    ):
-        self.category_repository = category_repository
+    def __init__(self, repo: CategoryRepository, uow: UnitOfWork):
+        self.repo = repo
         self.uow = uow
 
-    # =============================================================
-    # PUBLIC API
-    # =============================================================
+    # =========================================================
+    # PUBLIC
+    # =========================================================
     def execute(self, cmd: LoadCategoriesCommand) -> Dict[str, Any]:
 
         xls = pd.ExcelFile(cmd.file_path)
-        all_categories = {}
 
-        parsed_results = []
-
-        # Create aggregate for the whole catalog
         catalog = CategoryCatalog()
+
         self.uow.register(catalog)
 
-        # Stage 1 — Parallel sheet parsing
-        with ThreadPoolExecutor(max_workers=self.SHEET_WORKERS) as executor:
-            futures = {
-                executor.submit(self._process_sheet, xls, sheet): sheet
-                for sheet in xls.sheet_names
-            }
+        all_categories: Dict[str, Dict[str, Any]] = {}
 
-            for future in as_completed(futures):
-                sheet_name = futures[future]
-                try:
-                    parsed_results.append((sheet_name, future.result()))
-                except Exception as e:
-                    print(f"Error processing sheet {sheet_name}: {e}")
-
-        # Stage 2 — Add to aggregate and commit per sheet
-        for sheet_name, categories in parsed_results:
+        for sheet in xls.sheet_names:
+            categories = self._parse_sheet(xls, sheet)
 
             if not categories:
                 continue
 
-            categories = self._deduplicate_categories(categories)
-
-            # Use aggregate for validation and keyword enhancement
             catalog.add_categories_batch(categories)
 
-        # Enhance keywords via aggregate
+            all_categories[sheet] = {
+                "categories": categories,
+                "all_key_words": {
+                    kw for c in categories for kw in (c.keywords or [])
+                },
+            }
+
+        # Aggregate-level logic
         catalog.enhance_keywords_from_parents()
 
-        # Persist ALL categories sorted by level (parents before children)
-        # This avoids FK violations when a child in one sheet references
-        # a parent that was parsed from a different sheet.
-        all_enhanced = catalog.categories
-        all_enhanced_sorted = sorted(all_enhanced, key=lambda c: c.level)
+        # Persist ordered
+        sorted_categories = sorted(catalog.categories, key=lambda c: c.level)
+        saved = self.repo.save_batch(sorted_categories)
 
-        # Build a lookup: category_id → sheet_name
-        cat_id_to_sheet: Dict[str, str] = {}
-        for sheet_name, categories in parsed_results:
-            for cat in categories:
-                cat_id_to_sheet[cat.id] = sheet_name
-
-        # Persist in level order (all at once)
-        saved_all = self._commit_sheet("ALL", all_enhanced_sorted)
-
-        # Distribute saved categories back into per-sheet buckets
-        for cat in saved_all:
-            sheet_name = cat_id_to_sheet.get(cat.id, "unknown")
-
-            if sheet_name not in all_categories:
-                all_categories[sheet_name] = {
-                    "categories": [],
-                    "all_key_words": set()
-                }
-
-            all_categories[sheet_name]["categories"].append(cat)
-            if cat.keywords:
-                all_categories[sheet_name]["all_key_words"].update(cat.keywords)
-
-        # Commit UoW: persist events to outbox, dispatch handlers
         self.uow.commit()
 
-        print(f"\n\nTotal categories loaded: {len(all_categories)}")
+        return saved
 
-        return all_categories
+    # =========================================================
+    # CORE PARSING (SIMPLIFIED)
+    # =========================================================
+    def _parse_sheet(self, xls: pd.ExcelFile, sheet: str) -> List[Category]:
 
-    # Sheet processing
-    def _process_sheet(
-        self,
-        xls: pd.ExcelFile,
-        sheet_name: str,
-    ) -> List[Category]:
+        df = pd.read_excel(xls, sheet_name=sheet)
+        df = df.dropna(how="all").dropna(how="all", axis=1)  # Drop empty rows and columns
 
-        df: pd.DataFrame | None = self._prepare_dataframe(xls, sheet_name)
-
-        if df is None:
+        if df.empty:
             return []
 
-        categories: List[Category] = []
-        last_inserted: Dict[int, str] = {}
-
-        for _, row in df.iterrows():
-
-            row_dict = self._clean_row(row)
-            if not row_dict:
-                continue
-
-            category = self._parse_row(
-                row_dict,
-                last_inserted,
-            )
-            if not category:
-                continue
-
-            categories.append(category)
-
-        categories.sort(key=lambda c: (c.level, c.parent_id or ""))
-
-        print(f"Prepared {len(categories)} categories for {sheet_name}")
-
-        return categories
-
-    # Dataframe preparation
-    def _prepare_dataframe(
-        self,
-        xls: pd.ExcelFile,
-        sheet_name: str,
-    ) -> pd.DataFrame | None:
-
-        df = pd.read_excel(xls, sheet_name=sheet_name)
-
-        if df.empty or len(df.columns) < 3:
-            print(f"Skipping sheet {sheet_name} (invalid structure).")
-            return None
-
-        df.columns = df.columns.map(lambda x: str(x).strip())
+        df.columns = [str(c).strip() for c in df.columns]
 
         lower_cols = [c.lower() for c in df.columns]
-        if not all(col in lower_cols for col in ["catid", "url"]):
-            print(f"Skipping sheet {sheet_name} (no 'catid' or 'url').")
-            return None
+        if "catid" not in lower_cols:
+            return []
 
-        cat_id_index = lower_cols.index("catid")
-        level_count = cat_id_index
-
-        levels = [f"level {i}" for i in range(1, level_count + 1)]
-        remaining = list(df.columns[level_count:])
-
-        df.columns = levels + remaining
-
-        df.dropna(axis=1, how="all", inplace=True)
-
-        return df
-
-    # =============================================================
-    # ROW PARSING
-    # =============================================================
-    def _clean_row(self, row: pd.Series) -> Dict[str, Any]:
-
-        return {
-            str(k).strip(): v
-            for k, v in row.to_dict().items()
-            if pd.notna(v)
-        }
-
-    def _parse_row(
-        self,
-        row_dict: Dict[str, Any],
-        last_inserted: Dict[int, str],
-    ) -> Category | None:
-
-        level_key = self._find_key(row_dict, "level")
-        id_key = self._find_key(row_dict, "catid")
-
-        if not level_key or not id_key:
-            return None
-
-        level = self._extract_level(level_key)
-        if not level:
-            return None
-
-        name = str(row_dict.get(level_key)).strip()
-        cat_id = str(row_dict.get(id_key)).strip()
-
-        if not name or not cat_id:
-            return None
-
-        parent_id = last_inserted.get(level - 1)
-        last_inserted[level] = cat_id
-
-        titulo = self._clean_text(row_dict.get(
-            self._find_key(row_dict, "meta") or "", ""
-        ))
-
-        descripcion = self._clean_text(row_dict.get(
-            self._find_key(row_dict, "descripcion") or "", ""
-        ))
-
-        palabras = row_dict.get(self._find_key(row_dict, "keyword"), "")
-        keywords = self._extract_keywords(titulo, descripcion, palabras)
-
-        category = Category.create(
-            id=cat_id,
-            name=name,
-            level=level,
-            parent_id=parent_id,
-            description=descripcion,
-            url=row_dict.get(self._find_key(row_dict, "url")),
-            keywords=tuple(keywords),
+        cat_idx = lower_cols.index("catid")
+        df.columns = (
+            [f"level_{i}" for i in range(1, cat_idx + 1)]
+            + list(df.columns[cat_idx:])
         )
 
-        return category
+        last_parent: Dict[int, str] = {}
+        seen: Dict[str, Category] = {}
 
-    # Helpers
-    @staticmethod
-    def _find_key(data: Dict[str, Any], keyword: str) -> str | None:
-        return next(
-            (k for k in data.keys() if keyword in k.lower()),
-            None,
-        )
+        for row in df.itertuples(index=False):
 
-    @staticmethod
-    def _extract_level(key: str) -> int | None:
-        match = re.search(r"\d+", key)
-        return int(match.group()) if match else None
+            row_dict = {
+                k: v for k, v in row._asdict().items() if pd.notna(v)
+            }
 
-    @staticmethod
-    def _clean_text(text: Any) -> str:
-        text = unicodedata.normalize("NFKD", str(text))
-        text = re.sub(r"http\S+|www\S+|https\S+", "", text)
-        text = re.sub(r"\S*\.com\S*", "", text)
-        text = re.sub(r"[^a-zA-Z0-9\s_-]", "", text)
-        return text.strip()
+            level_key = next((k for k in row_dict if "level" in k), None)
+            id_key = next((k for k in row_dict if "catid" in k.lower()), None)
+
+            if not level_key or not id_key:
+                continue
+
+            level = int(re.search(r"\d+", level_key).group())
+            name = str(row_dict[level_key]).strip()
+            cat_id = str(row_dict[id_key]).strip()
+
+            if not name or not cat_id:
+                continue
+
+            parent_id = last_parent.get(level - 1)
+            last_parent[level] = cat_id
+
+            meta_key = self._find(row_dict, "meta")
+            desc_key = self._find(row_dict, "descripcion")
+            kw_key = self._find(row_dict, "keyword")
+
+            titulo = self._clean(row_dict.get(meta_key, "")) if meta_key else ""
+            descripcion = self._clean(row_dict.get(desc_key, "")) if desc_key else ""
+
+            palabras = row_dict.get(kw_key, []) if kw_key else []
+            if isinstance(palabras, str):
+                try:
+                    palabras = json.loads(palabras)
+                except json.JSONDecodeError:
+                    palabras = [palabras]
+
+            category = Category.create(
+                id=cat_id,
+                name=name,
+                level=level,
+                parent_id=parent_id,
+                description=descripcion,
+                keywords=LoadCategoriesUseCase._extract_keywords(
+                    titulo, descripcion, palabras
+                ),
+            )
+
+            # Deduplicate in O(1)
+            seen[cat_id] = category
+
+        result = list(seen.values())
+        print(f"{sheet}: {len(result)} categories")
+
+        return result
 
     @staticmethod
     def _extract_keywords(
@@ -285,7 +165,6 @@ class LoadCategoriesUseCase:
         descripcion: str,
         palabras: Any,
     ) -> List[str]:
-
         pattern = r"[A-Za-zÁÉÍÓÚáéíóúÑñ]+"
         extracted = []
 
@@ -307,26 +186,14 @@ class LoadCategoriesUseCase:
         return list(dict.fromkeys(extracted))
 
     @staticmethod
-    def _deduplicate_categories(
-        categories: List[Category],
-    ) -> List[Category]:
-        unique = {}
-        for c in categories:
-            unique[c.id] = c
-        return list(unique.values())
+    def _clean(x):
+        x = unicodedata.normalize("NFKD", str(x))
+        x = re.sub(r"http\S+|www\S+", "", x)
+        x = re.sub(r"[^a-zA-Z0-9\s_-]", "", x)
+        return x.strip().lower()
 
-    def _commit_sheet(
-        self,
-        sheet_name: str,
-        categories: List[Category],
-    ) -> List[Category]:
-
-        try:
-            saved = self.category_repository.save_batch(categories)
-            print(f"✓ Sheet {sheet_name}: {len(saved)} categories saved")
-            return saved
-
-        except Exception as e:
-            self.uow.rollback()
-            print(f"✗ Rollback sheet {sheet_name}: {e}")
-            raise
+    @staticmethod
+    def _find(row_dict, keyword):
+        return next(
+            (k for k in row_dict if keyword in k.lower()), None
+        )

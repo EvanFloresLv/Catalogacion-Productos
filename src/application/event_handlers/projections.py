@@ -1,16 +1,3 @@
-# -----------------------------------------------------------------
-# Application — Projection Handlers
-# -----------------------------------------------------------------
-"""
-Projection handlers subscribe to domain events and update
-denormalized read-model tables.
-
-Rules:
-  - Projection handlers operate AFTER the write-side commit
-  - They open their own short-lived session (separate transaction)
-  - They are idempotent: replaying the same event produces the same result
-  - Failures are logged but MUST NOT break the main flow
-"""
 from __future__ import annotations
 
 import json

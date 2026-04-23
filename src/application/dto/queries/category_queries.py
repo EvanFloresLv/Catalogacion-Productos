@@ -6,7 +6,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-
 @dataclass(frozen=True)
 class GetCategoryTreeQuery:
     """Query to get a category tree."""
@@ -19,6 +18,5 @@ class GetProfilesByConstraintsQuery:
     gender: Optional[str] = None
     direction: Optional[str] = None
     brand: Optional[str] = None
-    business: Optional[str] = None
     is_leaf: Optional[bool] = None
     limit: Optional[int] = None
