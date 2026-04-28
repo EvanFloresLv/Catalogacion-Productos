@@ -26,7 +26,7 @@ from application.dto.commands.classification_commands import ClassifyProductComm
 # ── Queries ──────────────────────────────────────────────────────
 from application.dto.queries.category_queries import (
     GetCategoryTreeQuery,
-    GetProfilesByConstraintsQuery,
+    GetCategoriesByConstraintsQuery,
 )
 from application.dto.queries.product_queries import (
     GetProductBySkuQuery,
@@ -99,7 +99,7 @@ class DTOFactory:
         )
 
     @staticmethod
-    def create_get_profiles_by_constraints_query(
+    def create_get_categories_by_constraints_query(
         *,
         gender: Optional[str] = None,
         direction: Optional[str] = None,
@@ -107,9 +107,9 @@ class DTOFactory:
         business: Optional[str] = None,
         is_leaf: Optional[bool] = None,
         limit: Optional[int] = None,
-    ) -> GetProfilesByConstraintsQuery:
-        """Create a GetProfilesByConstraintsQuery with optional filters."""
-        return GetProfilesByConstraintsQuery(
+    ) -> GetCategoriesByConstraintsQuery:
+        """Create a GetCategoriesByConstraintsQuery with optional filters."""
+        return GetCategoriesByConstraintsQuery(
             gender=gender,
             direction=direction,
             brand=brand,

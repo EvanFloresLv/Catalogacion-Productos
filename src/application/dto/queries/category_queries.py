@@ -13,10 +13,11 @@ class GetCategoryTreeQuery:
 
 
 @dataclass(frozen=True)
-class GetProfilesByConstraintsQuery:
-    """Query to find category profiles matching constraints."""
+class GetCategoriesByConstraintsQuery:
+    """Query to find categories matching constraints."""
     gender: Optional[str] = None
     direction: Optional[str] = None
     brand: Optional[str] = None
+    business: Optional[str] = None
     is_leaf: Optional[bool] = None
     limit: Optional[int] = None

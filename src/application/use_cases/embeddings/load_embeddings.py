@@ -11,6 +11,7 @@ from domain.entities.category import Category
 from domain.entities.embedding import Embedding
 from domain.repositories.embedding_repository import EmbeddingRepository
 from domain.services.embedding_service import EmbeddingService
+from domain.aggregates.embedding_catalog import EmbeddingCatalog
 
 from shared.kernel.unit_of_work import UnitOfWork
 
@@ -39,22 +40,22 @@ class LoadEmbeddingsUseCase:
 
     def __init__(
         self,
-        embedding_repository: EmbeddingRepository,
-        embedding_service: EmbeddingService,
+        repo: EmbeddingRepository,
+        service: EmbeddingService,
         uow: UnitOfWork,
     ):
-        self.embedding_repository = embedding_repository
-        self.embedding_service = embedding_service
+        self.repo = repo
+        self.service = service
         self.uow = uow
 
     # =============================================================
-    # PUBLIC API
+    # PUBLIC
     # =============================================================
     def execute(self, cmd: LoadEmbeddingsCommand) -> List[Embedding]:
-        """
-        Generate embeddings for categories and save to database.
-        Returns list of saved embeddings.
-        """
+
+        catalog = EmbeddingCatalog()
+        self.uow.register(catalog)
+
         if not cmd.categories:
             return []
 
@@ -73,7 +74,12 @@ class LoadEmbeddingsUseCase:
         # Deduplicate and save
         embeddings = self._deduplicate_embeddings(embeddings)
 
-        return self._commit_embeddings(embeddings)
+        catalog.add_embeddings_batch(embeddings)
+        saved = self.repo.save_batch(catalog.embeddings)
+
+        self.uow.commit()
+
+        return saved
 
     # =============================================================
     # EMBEDDING GENERATION
@@ -83,7 +89,6 @@ class LoadEmbeddingsUseCase:
         categories: List[Category],
         embedding_texts: List[str],
     ) -> List[Embedding]:
-        """Generate embeddings for all categories in parallel batches."""
 
         if not categories:
             return []
@@ -93,7 +98,7 @@ class LoadEmbeddingsUseCase:
         # Generate vectors in batches
         for i in range(0, len(categories), self.BATCH_SIZE):
             batch_texts = embedding_texts[i:i + self.BATCH_SIZE]
-            batch_vectors = self.embedding_service.generate_batch(batch_texts)
+            batch_vectors = self.service.generate_batch(batch_texts)
             vectors.extend(batch_vectors)
 
         # Create Embedding entities
@@ -114,7 +119,6 @@ class LoadEmbeddingsUseCase:
     # =============================================================
     @staticmethod
     def _get_embedding_text(category: Category) -> str:
-        """Get embedding text from category, with fallback."""
         embedding_text = category.to_embedding_text()
 
         # Fallback if text is empty
@@ -127,27 +131,8 @@ class LoadEmbeddingsUseCase:
     def _deduplicate_embeddings(
         embeddings: List[Embedding],
     ) -> List[Embedding]:
-        """Remove duplicate embeddings by (category_id, content_hash)."""
+
         unique = {}
         for e in embeddings:
             unique[(e.category_id, e.content_hash)] = e
         return list(unique.values())
-
-    # =============================================================
-    # TRANSACTION
-    # =============================================================
-    def _commit_embeddings(
-        self,
-        embeddings: List[Embedding],
-    ) -> List[Embedding]:
-        """Save embeddings to database within a transaction."""
-
-        try:
-            self.embedding_repository.save_batch(embeddings)
-            print(f"✓ {len(embeddings)} embeddings saved")
-            return embeddings
-
-        except Exception as e:
-            self.uow.rollback()
-            print(f"✗ Rollback embeddings: {e}")
-            raise

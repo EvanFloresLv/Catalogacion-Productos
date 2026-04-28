@@ -14,7 +14,7 @@ class LoadCategoriesCommand:
 
 @dataclass(frozen=True)
 class LoadCategoriesFromFileCommand:
-    """Command to load categories, embeddings, and profiles from an Excel file."""
+    """Command to load categories and embeddings from an Excel file."""
     file_path: str
     brand: bool = False
     business: str = "liverpool"

@@ -10,6 +10,8 @@ from typing import Tuple, Any
 # Internal application imports
 # ---------------------------------------------------------------------
 from .errors import CategoryNameError
+from .brand import Brand
+
 from domain.value_objects.semantic_hash import SemanticHash
 from utils.domain_validatons import validate_entity_fields, normalize_str
 
@@ -33,6 +35,11 @@ class Category:
     parent_id: str | None = None
     description: str | None = None
     semantic_hash: str = ""
+    gender: str | None = None
+    direction: str | None = None
+    brand: Brand | None = None
+    is_leaf: bool | None = None
+    group_articles: list[int] | None = None
 
     # ---------------------------------------------------------
     # Structured fields
@@ -124,3 +131,21 @@ class Category:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+if __name__ == "__main__":
+
+    category = Category.create(
+        id="1",
+        name="Electronics",
+        level=1,
+        parent_id=None,
+        description="All electronic items",
+        keywords=("electronics", "gadgets"),
+        gender="unisex",
+        direction="kids",
+        brand=None,
+        is_leaf=False
+    )
+
+    print(category)

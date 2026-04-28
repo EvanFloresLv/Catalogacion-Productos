@@ -29,11 +29,10 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
     def __init__(
         self,
         session: Session,
-        expected_dimension: int,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ):
         self.session = session
-        self.expected_dimension = expected_dimension
+        self.expected_dimension = EmbeddingModel.vector.type.dim
         self.batch_size = batch_size
 
     # ============================================================
@@ -58,10 +57,11 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
 
     # -------------------------------------------------------------
 
-    def save_batch(self, embeddings: list[Embedding]) -> None:
+    def save_batch(self, embeddings: list[Embedding]) -> list[Embedding]:
         if not embeddings:
-            return
+            return []
 
+        all_results: list = []
         for i in range(0, len(embeddings), self.batch_size):
             chunk = embeddings[i : i + self.batch_size]
 
@@ -79,17 +79,22 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
 
             stmt = insert(EmbeddingModel).values(rows)
 
-            stmt = stmt.on_conflict_do_update(
-                constraint="uq_embeddings_category_hash",
-                set_={
-                    "vector": stmt.excluded.vector,
-                    "dimension": stmt.excluded.dimension,
-                },
+            stmt = (
+                stmt.on_conflict_do_update(
+                    constraint="uq_embeddings_category_hash",
+                    set_={
+                        "vector": stmt.excluded.vector,
+                        "dimension": stmt.excluded.dimension,
+                    },
+                )
+                .returning(EmbeddingModel)
             )
 
-            self.session.execute(stmt)
+            results = self.session.execute(stmt).scalars().all()
+            self.session.flush()
+            all_results.extend(results)
 
-        self.session.flush()
+        return [self._to_entity(r) for r in all_results]
 
     # ============================================================
     # Retrieval

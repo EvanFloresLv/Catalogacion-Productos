@@ -118,6 +118,9 @@ def validate_entity_fields(
         if name in to_remove:
             continue
 
+        if not field.init:
+            continue
+
         value = data.get(name)
 
         if name in required_fields and value is None:
@@ -139,10 +142,16 @@ def validate_entity_fields(
             normalized_data[name] = normalize_bool(value)
 
         elif origin in (tuple, list, set):
-            normalized_data[name] = normalize_iterable(value)
+            if name == "keywords":
+                normalized_data[name] = normalize_iterable(value)
+            else:
+                normalized_data[name] = value
 
         elif isinstance(value, (list, tuple, set)):
-            normalized_data[name] = normalize_iterable(value)
+            if name == "keywords":
+                normalized_data[name] = normalize_iterable(value)
+            else:
+                normalized_data[name] = value
 
         else:
             normalized_data[name] = value

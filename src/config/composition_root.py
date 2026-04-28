@@ -13,14 +13,14 @@ from shared.kernel.unit_of_work import UnitOfWork
 from infrastructure.persistence.postgresql.repositories.category_repository_pg import (
     CategoryRepositoryPG,
 )
-from infrastructure.persistence.postgresql.repositories.category_profile_repository_pg import (
-    CategoryProfileRepositoryPG,
-)
 from infrastructure.persistence.postgresql.repositories.embedding_repository_pg import (
     EmbeddingRepositoryPG,
 )
 from infrastructure.persistence.postgresql.repositories.product_repository_pg import (
     ProductRepositoryPG,
+)
+from infrastructure.persistence.postgresql.repositories.brand_repository_pg import (
+    BrandRepositoryPG,
 )
 
 # Infrastructure — UoW + Outbox
@@ -30,8 +30,6 @@ from adapters.messaging.postgres_outbox_writer import PostgresOutboxWriter
 
 # Infrastructure — External services
 from infrastructure.embeddings.gemini.client import EmbeddingClient
-from infrastructure.llm.gemini.client import LLMClient
-from infrastructure.prompts import Prompt
 
 # Application — Event handlers
 from application.event_handlers.logging_handler import LoggingEventHandler
@@ -60,15 +58,10 @@ def create_category_repository(session: Session) -> CategoryRepositoryPG:
     return CategoryRepositoryPG(session)
 
 
-def create_category_profile_repository(session: Session) -> CategoryProfileRepositoryPG:
-    return CategoryProfileRepositoryPG(session)
-
-
 def create_embedding_repository(
     session: Session,
-    expected_dimension: int = 768,
 ) -> EmbeddingRepositoryPG:
-    return EmbeddingRepositoryPG(session, expected_dimension=expected_dimension)
+    return EmbeddingRepositoryPG(session)
 
 
 def create_product_repository(session: Session) -> ProductRepositoryPG:
@@ -112,7 +105,6 @@ def create_unit_of_work(
 def create_category_query_service(session: Session) -> CategoryQueryService:
     return CategoryQueryService(
         categories=create_category_repository(session),
-        profiles=create_category_profile_repository(session),
     )
 
 
@@ -126,11 +118,9 @@ def create_load_categories_from_file_use_case(
     uow = uow or create_unit_of_work(session)
     return LoadCategoriesFromFileUseCase(
         category_repository=create_category_repository(session),
-        profiles_repository=create_category_profile_repository(session),
+        brand_repository=BrandRepositoryPG(session),
         embedding_repository=create_embedding_repository(session),
         embedding_service=EmbeddingClient(embedding_dim=768),
-        llm_service=LLMClient(),
-        prompt_service=Prompt(),
         uow=uow,
     )
 
@@ -141,7 +131,7 @@ def create_create_product_use_case(
 ) -> LoadProductsUseCase:
     uow = uow or create_unit_of_work(session)
     return LoadProductsUseCase(
-        products=create_product_repository(session),
+        repo=create_product_repository(session),
         uow=uow,
     )
 

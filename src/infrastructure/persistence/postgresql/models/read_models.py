@@ -33,8 +33,8 @@ from infrastructure.persistence.postgresql.base import Base
 # -----------------------------------------------------------------
 class CategorySummaryReadModel(Base):
     """
-    Denormalized view combining category + profile + embedding stats.
-    Updated by CategoryCreatedEvent and CategoryProfileCreatedEvent.
+    Denormalized view combining category + embedding stats.
+    Updated by CategoryCreatedEvent.
     """
     __tablename__ = "rm_category_summary"
 
@@ -45,7 +45,7 @@ class CategorySummaryReadModel(Base):
     level: Mapped[int] = mapped_column(Integer, nullable=False)
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
-    # From profile
+    # From category
     gender: Mapped[str | None] = mapped_column(String(50), nullable=True)
     direction: Mapped[str | None] = mapped_column(String(50), nullable=True)
     business: Mapped[str | None] = mapped_column(String(50), nullable=True)

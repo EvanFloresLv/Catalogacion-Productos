@@ -16,6 +16,8 @@ import pandas as pd
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.category import Category
+from domain.entities.brand import Brand
+
 from domain.repositories.category_repository import CategoryRepository
 from domain.aggregates.category_catalog import CategoryCatalog
 
@@ -27,13 +29,24 @@ from shared.kernel.unit_of_work import UnitOfWork
 # -------------------------------------------------------------
 @dataclass
 class LoadCategoriesCommand:
-    file_path: str
+    data: pd.DataFrame
+    brand: Brand = None
 
 
 # -------------------------------------------------------------
-# Use Case (Simplified)
+# Use Case
 # -------------------------------------------------------------
 class LoadCategoriesUseCase:
+
+    ALLOWED = [
+        "catid",
+        "level",
+        "keywords",
+        "metadescripción",
+        "contra",
+        "género",
+        "grupo",
+    ]
 
     def __init__(self, repo: CategoryRepository, uow: UnitOfWork):
         self.repo = repo
@@ -43,34 +56,19 @@ class LoadCategoriesUseCase:
     # PUBLIC
     # =========================================================
     def execute(self, cmd: LoadCategoriesCommand) -> Dict[str, Any]:
+        categories = self._process_data(cmd.data, cmd.brand)
+        if not categories:
+            return None
+        return self.persist(categories)
 
-        xls = pd.ExcelFile(cmd.file_path)
+    def persist(self, categories: List[Category]) -> List[Category]:
 
         catalog = CategoryCatalog()
-
         self.uow.register(catalog)
 
-        all_categories: Dict[str, Dict[str, Any]] = {}
-
-        for sheet in xls.sheet_names:
-            categories = self._parse_sheet(xls, sheet)
-
-            if not categories:
-                continue
-
-            catalog.add_categories_batch(categories)
-
-            all_categories[sheet] = {
-                "categories": categories,
-                "all_key_words": {
-                    kw for c in categories for kw in (c.keywords or [])
-                },
-            }
-
-        # Aggregate-level logic
+        catalog.add_categories_batch(categories)
         catalog.enhance_keywords_from_parents()
 
-        # Persist ordered
         sorted_categories = sorted(catalog.categories, key=lambda c: c.level)
         saved = self.repo.save_batch(sorted_categories)
 
@@ -79,19 +77,19 @@ class LoadCategoriesUseCase:
         return saved
 
     # =========================================================
-    # CORE PARSING (SIMPLIFIED)
+    # CORE PARSING
     # =========================================================
-    def _parse_sheet(self, xls: pd.ExcelFile, sheet: str) -> List[Category]:
+    def _process_data(self, df: pd.DataFrame, brand: Brand = None) -> List[Category]:
 
-        df = pd.read_excel(xls, sheet_name=sheet)
         df = df.dropna(how="all").dropna(how="all", axis=1)  # Drop empty rows and columns
 
         if df.empty:
             return []
 
-        df.columns = [str(c).strip() for c in df.columns]
+        df.columns = [str(c).replace(" ", "_").strip() for c in df.columns]
 
         lower_cols = [c.lower() for c in df.columns]
+
         if "catid" not in lower_cols:
             return []
 
@@ -100,6 +98,20 @@ class LoadCategoriesUseCase:
             [f"level_{i}" for i in range(1, cat_idx + 1)]
             + list(df.columns[cat_idx:])
         )
+
+        df.columns = [c.lower() for c in df.columns]
+
+        columns_to_delete = [
+            col for col in df.columns
+            if not any(keyword in col for keyword in self.ALLOWED)
+        ]
+
+        df.drop(columns=columns_to_delete, inplace=True)
+
+        max_level = max(
+                int(col.split("_")[-1]) for col in df.columns
+                if col.startswith("level_")
+            ) if df.columns.str.startswith("level_").any() else 0
 
         last_parent: Dict[int, str] = {}
         seen: Dict[str, Category] = {}
@@ -129,6 +141,10 @@ class LoadCategoriesUseCase:
             meta_key = self._find(row_dict, "meta")
             desc_key = self._find(row_dict, "descripcion")
             kw_key = self._find(row_dict, "keyword")
+            ga_key = self._find(row_dict, "artículos")
+            gend_key = self._find(row_dict, "género")
+
+            group_articles = self._get_group_articles(row_dict.get(ga_key, None)) if ga_key else None
 
             titulo = self._clean(row_dict.get(meta_key, "")) if meta_key else ""
             descripcion = self._clean(row_dict.get(desc_key, "")) if desc_key else ""
@@ -145,19 +161,26 @@ class LoadCategoriesUseCase:
                 name=name,
                 level=level,
                 parent_id=parent_id,
-                description=descripcion,
                 keywords=LoadCategoriesUseCase._extract_keywords(
                     titulo, descripcion, palabras
                 ),
+                gender=row_dict.get(gend_key, None),
+                group_articles=group_articles,
+                direction=None,
+                brand=brand,
+                is_leaf=(level == max_level)
             )
 
             # Deduplicate in O(1)
             seen[cat_id] = category
 
         result = list(seen.values())
-        print(f"{sheet}: {len(result)} categories")
 
         return result
+
+    # =============================================================
+    # HELPERS
+    # =============================================================
 
     @staticmethod
     def _extract_keywords(
@@ -168,7 +191,7 @@ class LoadCategoriesUseCase:
         pattern = r"[A-Za-zÁÉÍÓÚáéíóúÑñ]+"
         extracted = []
 
-        # Parse palabras (can be JSON string, list, etc.)
+        # Words parsing (can be JSON string, list, etc.)
         if isinstance(palabras, str):
             try:
                 palabras = json.loads(palabras)
@@ -184,6 +207,20 @@ class LoadCategoriesUseCase:
         extracted.extend(re.findall(pattern, descripcion.lower()))
 
         return list(dict.fromkeys(extracted))
+
+    @staticmethod
+    def _get_group_articles(groups):
+        groups = groups.split(",")
+        group_nums = []
+        seen = set()
+
+        for g in groups:
+            num = re.search(r'\d+', g.strip())
+            if num and num.group() not in seen:
+                seen.add(num.group())
+                group_nums.append(num.group())
+
+        return group_nums
 
     @staticmethod
     def _clean(x):

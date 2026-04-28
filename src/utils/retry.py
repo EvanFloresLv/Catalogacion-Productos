@@ -54,6 +54,7 @@ def sync_exponential_backoff_retry_sync(
             return fn()
 
         except retry_on as exc:
+            print(f"Retry attempt {attempt} failed: {exc}")
             last_exc = exc
 
             if attempt == attempts:

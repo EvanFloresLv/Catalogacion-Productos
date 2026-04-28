@@ -7,7 +7,6 @@ from uuid import UUID
 
 # ── Entities ─────────────────────────────────────────────────────
 from domain.entities.category import Category
-from domain.entities.category_profile import CategoryProfile
 from domain.entities.product import Product
 from domain.entities.brand import Brand
 from domain.entities.embedding import Embedding
@@ -21,13 +20,12 @@ from domain.value_objects.semantic_hash import SemanticHash
 
 # ── Aggregates ───────────────────────────────────────────────────
 from domain.aggregates.category_catalog import CategoryCatalog
-from domain.aggregates.product_classification import ProductClassification
+from domain.aggregates.product_classification_catalog import ProductClassification
 
 # ── Domain Events ────────────────────────────────────────────────
 from domain.events.category_events import (
     CategoryCreatedEvent,
     CategoryKeywordsEnhancedEvent,
-    CategoryProfileCreatedEvent,
 )
 from domain.events.product_events import (
     ProductCreatedEvent,
@@ -71,6 +69,11 @@ class DomainFactory:
         parent_id: str | None = None,
         description: str | None = None,
         keywords: Tuple[str, ...] | List[str] | None = None,
+        gender: str | None = None,
+        direction: str | None = None,
+        brand: Brand | None = None,
+        is_leaf: bool | None = None,
+        group_articles: List[str] | None = None,
     ) -> Category:
         """
         Create a Category entity via its own ``create()`` factory.
@@ -85,25 +88,11 @@ class DomainFactory:
             parent_id=parent_id,
             description=description,
             keywords=keywords,
-        )
-
-    # ── CategoryProfile ──────────────────────────────────────────
-    @staticmethod
-    def create_category_profile(
-        *,
-        category: Category,
-        gender: str | None = None,
-        direction: str | None = None,
-        brand: Brand | None = None,
-        is_leaf: bool | None = None,
-    ) -> CategoryProfile:
-        """Create a CategoryProfile via its own ``create()`` factory."""
-        return CategoryProfile.create(
-            category=category,
             gender=gender,
             direction=direction,
             brand=brand,
             is_leaf=is_leaf,
+            group_articles=group_articles,
         )
 
     # ── Product ──────────────────────────────────────────────────
@@ -250,26 +239,6 @@ class DomainFactory:
             category_id=category_id,
             original_keyword_count=original_keyword_count,
             enhanced_keyword_count=enhanced_keyword_count,
-        )
-
-    @staticmethod
-    def create_category_profile_created_event(
-        *,
-        category_id: str,
-        gender: str | None = None,
-        direction: str | None = None,
-        business: str | None = None,
-        brand: str | None = None,
-        is_leaf: bool | None = None,
-    ) -> CategoryProfileCreatedEvent:
-        """Create a CategoryProfileCreatedEvent."""
-        return CategoryProfileCreatedEvent(
-            category_id=category_id,
-            gender=gender,
-            direction=direction,
-            business=business,
-            brand=brand,
-            is_leaf=is_leaf,
         )
 
     @staticmethod

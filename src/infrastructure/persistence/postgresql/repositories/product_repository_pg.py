@@ -27,12 +27,7 @@ class ProductRepositoryPG(ProductRepository):
     # Single upsert
     # ---------------------------------
     def save(self, product: Product) -> None:
-        """
-        Save or update a product.
 
-        On conflict (sku)
-        - Updates all fields except sku
-        """
         values = {
             field.name: getattr(product, field.name)
             for field in fields(Product)
@@ -59,12 +54,7 @@ class ProductRepositoryPG(ProductRepository):
     # Batch upsert
     # ---------------------------------
     def save_batch(self, products: list[Product]) -> None:
-        """
-        Save or update multiple products in a batch.
 
-        On conflict (sku):
-        - Updates all fields except sku
-        """
         if not products:
             return
 
@@ -88,10 +78,13 @@ class ProductRepositoryPG(ProductRepository):
         stmt = stmt.on_conflict_do_update(
             index_elements=["sku"],
             set_=update_fields,
-        )
+        ).returning(ProductModel)
 
-        self.session.execute(stmt)
-        self.session.commit()
+        results = self.session.execute(stmt).scalars().all()
+        self.session.flush()
+
+        return [self._to_entity(r) for r in results]
+
 
     # ---------------------------------
     # Get single
@@ -142,12 +135,7 @@ class ProductRepositoryPG(ProductRepository):
     # ---------------------------------
     @staticmethod
     def _to_entity(model: ProductModel) -> Product:
-        """
-        Convert ProductModel to Product entity.
 
-        Maps all fields from the model to the entity,
-        handling keywords properly.
-        """
         values = {
             field.name: getattr(model, field.name)
             for field in fields(Product)

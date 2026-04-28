@@ -12,7 +12,6 @@ from shared.kernel.domain_event import DomainEvent
 from domain.events.category_events import (
     CategoryCreatedEvent,
     CategoryKeywordsEnhancedEvent,
-    CategoryProfileCreatedEvent,
 )
 from domain.events.product_events import (
     ProductClassifiedEvent,
@@ -89,7 +88,6 @@ class CategorySummaryProjection(Projection):
 
     Handles:
       - CategoryCreatedEvent            → inserts a new summary row
-      - CategoryProfileCreatedEvent     → enriches with profile data
       - CategoryKeywordsEnhancedEvent   → updates keyword_count
       - EmbeddingGeneratedEvent         → marks has_embedding = True
     """
@@ -124,47 +122,6 @@ class CategorySummaryProjection(Projection):
             session.rollback()
             logger.error(
                 "[Projection:CategorySummary] ✗ CategoryCreated failed: %s",
-                exc,
-            )
-        finally:
-            session.close()
-
-    def on_profile_created(self, event: CategoryProfileCreatedEvent) -> None:
-        session = self._get_session()
-        try:
-            row = (
-                session.query(CategorySummaryReadModel)
-                .filter_by(category_id=event.category_id)
-                .first()
-            )
-            if row:
-                row.gender = event.gender
-                row.direction = event.direction
-                row.business = event.business
-                row.brand = event.brand
-                row.is_leaf = event.is_leaf
-                row.updated_at = datetime.now(timezone.utc)
-            else:
-                row = CategorySummaryReadModel(
-                    category_id=event.category_id,
-                    name="",
-                    level=0,
-                    gender=event.gender,
-                    direction=event.direction,
-                    business=event.business,
-                    brand=event.brand,
-                    is_leaf=event.is_leaf,
-                )
-                session.add(row)
-            session.commit()
-            logger.info(
-                "[Projection:CategorySummary] ✓ ProfileCreated %s",
-                event.category_id,
-            )
-        except Exception as exc:
-            session.rollback()
-            logger.error(
-                "[Projection:CategorySummary] ✗ ProfileCreated failed: %s",
                 exc,
             )
         finally:

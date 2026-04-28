@@ -1,7 +1,6 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
-from uuid import UUID
 from dataclasses import fields
 
 # ---------------------------------------------------------------------
@@ -15,9 +14,13 @@ from sqlalchemy.orm import Session
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.category import Category
+from domain.entities.brand import Brand
 from domain.repositories.category_repository import CategoryRepository
 from infrastructure.persistence.postgresql.models.category_model import (
     CategoryModel,
+)
+from infrastructure.persistence.postgresql.models.brand_model import (
+    BrandModel,
 )
 
 
@@ -38,7 +41,7 @@ class CategoryRepositoryPG(CategoryRepository):
 
         stmt = (
             stmt.on_conflict_do_update(
-                constraint=["uq_categories_id_semantic_hash"],
+                index_elements=["id"],
                 set_=self._build_update_map(stmt),
             )
             .returning(CategoryModel)
@@ -68,7 +71,7 @@ class CategoryRepositoryPG(CategoryRepository):
 
             stmt = (
                 stmt.on_conflict_do_update(
-                    constraint="uq_categories_id_semantic_hash",
+                    index_elements=["id"],
                     set_=self._build_update_map(stmt),
                 )
                 .returning(CategoryModel)
@@ -80,11 +83,11 @@ class CategoryRepositoryPG(CategoryRepository):
 
         return [self._to_entity(r) for r in all_results]
 
+
     @staticmethod
     def _group_by_level(
         sorted_categories: list[Category],
     ) -> list[list[Category]]:
-        """Group a level-sorted list into sub-lists, one per level."""
         if not sorted_categories:
             return []
 
@@ -113,7 +116,7 @@ class CategoryRepositoryPG(CategoryRepository):
         results = self.session.execute(stmt).scalars().all()
         return self._to_entities(results)
 
-    def get_by_id(self, category_id: UUID) -> Category | None:
+    def get_by_id(self, category_id: str) -> Category | None:
         stmt = select(CategoryModel).where(CategoryModel.id == category_id)
         result = self.session.execute(stmt).scalar_one_or_none()
         return self._to_entity(result) if result else None
@@ -125,6 +128,30 @@ class CategoryRepositoryPG(CategoryRepository):
         results = self.session.execute(stmt).scalars().all()
         return self._to_entities(results)
 
+    def get_profiles_by_constraints(
+        self,
+        gender: str | None = None,
+        direction: str | None = None,
+        brand: str | None = None,
+        is_leaf: bool | None = None,
+        limit: int | None = None,
+    ) -> list[Category]:
+        stmt = select(CategoryModel)
+
+        if gender is not None:
+            stmt = stmt.where(CategoryModel.gender == gender)
+        if direction is not None:
+            stmt = stmt.where(CategoryModel.direction == direction)
+        if brand is not None:
+            stmt = stmt.join(CategoryModel.brand).where(BrandModel.name == brand)
+        if is_leaf is not None:
+            stmt = stmt.where(CategoryModel.is_leaf == is_leaf)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        results = self.session.execute(stmt).scalars().all()
+        return self._to_entities(results)
+
     # ============================================================
     # Helpers
     # ============================================================
@@ -132,6 +159,7 @@ class CategoryRepositoryPG(CategoryRepository):
     @staticmethod
     def _build_row(category: Category) -> dict:
 
+        model_columns = {c.name for c in CategoryModel.__table__.columns}
         row = {}
 
         for field in fields(Category):
@@ -140,17 +168,37 @@ class CategoryRepositoryPG(CategoryRepository):
             if not field.init:
                 continue
 
+            # Brand is handled separately via brand_id FK
+            if field.name == "brand":
+                continue
+
+            # Skip fields not in the DB model
+            if field.name not in model_columns:
+                continue
+
             value = getattr(category, field.name)
 
             # Convert tuple -> list for Postgres arrays
             if field.name == "keywords":
                 value = list(value or [])
 
+            # Convert list -> list for Postgres JSONB
+            if field.name == "group_articles":
+                value = list(value) if value else None
+
             row[field.name] = value
 
-        # Persist derived field explicitly if needed
-        # (safe because it is read-only in entity)
-        row["semantic_hash"] = category.semantic_hash
+        # Persist derived field explicitly
+        if "semantic_hash" in model_columns:
+            row["semantic_hash"] = category.semantic_hash
+
+        # Resolve brand → brand_id: look up by name or store None
+        if "brand_id" in model_columns:
+            brand = category.brand
+            if brand is not None:
+                row["brand_id"] = brand.name if hasattr(brand, "name") else str(brand)
+            else:
+                row["brand_id"] = None
 
         return row
 
@@ -158,11 +206,6 @@ class CategoryRepositoryPG(CategoryRepository):
 
     @staticmethod
     def _build_update_map(stmt) -> dict:
-        """
-        Dynamically build ON CONFLICT update map.
-        Excludes primary key.
-        """
-
         return {
             column.name: getattr(stmt.excluded, column.name)
             for column in CategoryModel.__table__.columns
@@ -173,26 +216,29 @@ class CategoryRepositoryPG(CategoryRepository):
 
     @staticmethod
     def _to_entity(model: CategoryModel) -> Category:
-        """
-        Dynamic domain hydration.
-        Only inject init=True fields.
-        """
-
         init_fields = {
             field.name
             for field in fields(Category)
             if field.init
         }
 
-        entity = Category(
-            **{
-                field: getattr(model, field)
-                for field in init_fields
-                if hasattr(model, field)
-            }
-        )
+        kwargs: dict = {}
+        for field_name in init_fields:
+            if field_name == "brand":
+                # Reconstruct Brand entity from the BrandModel relationship
+                brand_model = model.brand
+                kwargs["brand"] = (
+                    Brand(
+                        name=brand_model.name,
+                        business=tuple(brand_model.business or []),
+                    )
+                    if brand_model is not None
+                    else None
+                )
+            elif hasattr(model, field_name):
+                kwargs[field_name] = getattr(model, field_name)
 
-        return entity
+        return Category(**kwargs)
 
     # -------------------------------------------------------------
 

@@ -2,12 +2,11 @@
 # Standard library
 # ---------------------------------------------------------------------
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
 
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import String, ForeignKey, Text, UniqueConstraint, Integer, Column
+from sqlalchemy import String, ForeignKey, UniqueConstraint, Integer, Column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,9 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 # Internal application imports
 # ---------------------------------------------------------------------
 from infrastructure.persistence.postgresql.base import Base
-
-if TYPE_CHECKING:
-    from infrastructure.persistence.postgresql.models.category_profile_model import CategoryProfileModel
+from infrastructure.persistence.postgresql.models.brand_model import BrandModel
 
 
 class CategoryModel(Base):
@@ -31,11 +28,26 @@ class CategoryModel(Base):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     level: Mapped[int] = mapped_column(Integer, nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=True)
-    url: Mapped[str] = mapped_column(String(255), nullable=True)
 
     semantic_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     keywords = Column(JSONB, nullable=False, default=list)
+
+    gender: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_leaf: Mapped[bool | None] = mapped_column(nullable=True)
+    group_articles: Mapped[list[str]] = mapped_column(JSONB, nullable=True, default=list)
+
+    brand_id: Mapped[str | None] = mapped_column(
+        String(100),
+        ForeignKey("brands.name"),
+        nullable=True
+    )
+
+    brand: Mapped[BrandModel | None] = relationship(
+        "BrandModel",
+        foreign_keys=[brand_id],
+        lazy="selectin",
+    )
 
     parent_id: Mapped[str | None] = mapped_column(
         String(36),
@@ -43,21 +55,13 @@ class CategoryModel(Base):
         nullable=True,
     )
 
-    parent: Mapped["CategoryModel | None"] = relationship(
+    parent: Mapped[CategoryModel | None] = relationship(
         "CategoryModel",
         remote_side="[CategoryModel.id]",
         uselist=False,
         lazy="selectin",
     )
 
-    profile: Mapped[Optional["CategoryProfileModel"]] = relationship(
-        "CategoryProfileModel",
-        back_populates="category",
-        uselist=False,
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-
     __table_args__ = (
-        UniqueConstraint("id", "semantic_hash", name="uq_categories_id_semantic_hash"),
+        UniqueConstraint("id", "direction", name="uq_categories_id_direction"),
     )

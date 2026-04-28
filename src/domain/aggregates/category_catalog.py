@@ -3,33 +3,28 @@ from typing import List, Dict, Optional
 
 from shared.kernel.aggregate_root import AggregateRoot
 from domain.entities.category import Category
-from domain.entities.category_profile import CategoryProfile
 from domain.events.category_events import (
     CategoryCreatedEvent,
-    CategoryProfileCreatedEvent,
     CategoryKeywordsEnhancedEvent,
 )
 
 
 class CategoryCatalog(AggregateRoot):
     """
-    Aggregate root that manages a collection of categories and their profiles.
+    Aggregate root that manages a collection of categories.
 
     Invariants:
       - Every category must have a valid parent_id (if not root)
-      - Leaf categories must have profiles before classification
       - Keywords are enhanced from parent chain (excluding root)
 
     Events emitted:
       - CategoryCreatedEvent
-      - CategoryProfileCreatedEvent
       - CategoryKeywordsEnhancedEvent
     """
 
     def __init__(self) -> None:
         super().__init__()
         self._categories: Dict[str, Category] = {}
-        self._profiles: Dict[str, CategoryProfile] = {}
 
     # ---------------------------
     # Properties
@@ -38,15 +33,11 @@ class CategoryCatalog(AggregateRoot):
     def categories(self) -> List[Category]:
         return list(self._categories.values())
 
-    @property
-    def profiles(self) -> List[CategoryProfile]:
-        return list(self._profiles.values())
-
     # ---------------------------
     # Commands
     # ---------------------------
     def add_category(self, category: Category) -> None:
-        """Add a category to the catalog, enforcing parent integrity."""
+
         if category.parent_id and category.parent_id not in self._categories:
             # Allow if parent will be added later (batch scenarios)
             pass
@@ -61,7 +52,7 @@ class CategoryCatalog(AggregateRoot):
         ))
 
     def add_categories_batch(self, categories: List[Category]) -> None:
-        """Add multiple categories, validate parent integrity after all are added."""
+
         for cat in categories:
             self._categories[cat.id] = cat
 
@@ -77,24 +68,7 @@ class CategoryCatalog(AggregateRoot):
                 parent_id=cat.parent_id,
             ))
 
-    def add_profile(self, profile: CategoryProfile) -> None:
-        """Add or update a profile for a category."""
-        self._profiles[profile.category.id] = profile
-
-        self._record_event(CategoryProfileCreatedEvent(
-            category_id=profile.category.id,
-            gender=profile.gender,
-            direction=profile.direction,
-            business=profile.business,
-            brand=profile.brand,
-            is_leaf=profile.is_leaf,
-        ))
-
     def enhance_keywords_from_parents(self) -> List[Category]:
-        """
-        Enhance non-root categories with keywords from their parent chain
-        (excluding root level 1). Returns the enhanced categories.
-        """
         enhanced = []
 
         for cat in self._categories.values():
@@ -109,6 +83,7 @@ class CategoryCatalog(AggregateRoot):
             all_keywords.update(parent_keywords)
 
             if len(all_keywords) > original_count:
+
                 new_cat = Category.create(
                     id=cat.id,
                     name=cat.name,
@@ -116,7 +91,13 @@ class CategoryCatalog(AggregateRoot):
                     parent_id=cat.parent_id,
                     description=cat.description,
                     keywords=tuple(sorted(all_keywords)),
+                    gender=cat.gender,
+                    direction=cat.direction,
+                    brand=cat.brand,
+                    is_leaf=cat.is_leaf,
+                    group_articles=cat.group_articles,
                 )
+
                 self._categories[cat.id] = new_cat
                 enhanced.append(new_cat)
 

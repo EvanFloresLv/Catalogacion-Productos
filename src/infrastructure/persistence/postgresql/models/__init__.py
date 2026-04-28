@@ -1,5 +1,5 @@
+from .brand_model import BrandModel
 from .category_model import CategoryModel
-from .category_profile_model import CategoryProfileModel
 from .embedding_model import EmbeddingModel
 from .product_model import ProductModel
 from .outbox_model import OutboxModel
@@ -11,10 +11,10 @@ from .read_models import (
 )
 
 __all__ = [
+    "BrandModel",
     "CategoryModel",
     "ProductModel",
     "EmbeddingModel",
-    "CategoryProfileModel",
     "OutboxModel",
     "CategorySummaryReadModel",
     "ProductClassificationReadModel",

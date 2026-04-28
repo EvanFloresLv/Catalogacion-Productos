@@ -6,8 +6,9 @@ from dataclasses import dataclass
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.repositories.product_repository import ProductRepository
 from domain.entities.product import Product
+from domain.repositories.product_repository import ProductRepository
+from domain.aggregates.product_catalog import ProductCatalog
 
 from shared.kernel.unit_of_work import UnitOfWork
 
@@ -18,33 +19,28 @@ class LoadProductCommand:
 
 
 class LoadProductsUseCase:
-    """
-    Use case for loading products with automatic normalization.
-
-    Architecture:
-      - Uses UnitOfWork for transactional commit + event dispatch
-      - The Product.create factory handles validation and normalization
-    """
 
     def __init__(
         self,
-        products: ProductRepository,
+        repo: ProductRepository,
         uow: UnitOfWork,
     ):
-        self.products = products
+        self.repo = repo
         self.uow = uow
 
     def execute(self, cmd: LoadProductCommand) -> list[Product]:
-        # Load products by IDs
+
+        catalog = ProductCatalog()
+        self.uow.register(catalog)
+
         products = [
             Product.create(**product_data)
             for product_data in cmd.products
         ]
 
-        # Save all products in batch
-        self.products.save_batch(products)
+        catalog.add_products_batch(products)
+        saved = self.repo.save_batch(catalog.products)
 
-        # Commit via UoW
         self.uow.commit()
 
-        return products
+        return saved

@@ -56,7 +56,6 @@ class CLIController:
 
             print(f"\n✓ Categories: {len(result.get('categories', []))}")
             print(f"✓ Embeddings: {len(result.get('embeddings', []))}")
-            print(f"✓ Profiles:   {len(result.get('profiles', []))}")
 
     # =============================================================
     # Create products

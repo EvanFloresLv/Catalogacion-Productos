@@ -57,29 +57,34 @@ class SqlAlchemyUnitOfWork(UnitOfWork):
         3. Dispatch to handlers
         4. DB commit
         """
-        # Collect all events
-        all_events: List[DomainEvent] = []
-        for aggregate in self._tracked:
-            all_events.extend(aggregate.pull_events())
+        try:
+            # Collect all events
+            all_events: List[DomainEvent] = []
+            for aggregate in self._tracked:
+                all_events.extend(aggregate.pull_events())
 
-        # Persist to outbox (same transaction)
-        if all_events:
-            self._outbox.write(all_events)
+            # Persist to outbox (same transaction)
+            if all_events:
+                self._outbox.write(all_events)
 
-        # Commit the database transaction
-        self._session.commit()
+            # Commit the database transaction
+            self._session.commit()
 
-        # Dispatch events to in-process handlers (after commit)
-        for event in all_events:
-            for handler in self._event_handlers:
-                try:
-                    handler.handle(event)
-                except Exception as e:
-                    # Handlers MUST NOT break the main flow
-                    print(f"[EventHandler Error] {handler.__class__.__name__}: {e}")
+            # Dispatch events to in-process handlers (after commit)
+            for event in all_events:
+                for handler in self._event_handlers:
+                    try:
+                        handler.handle(event)
+                    except Exception as e:
+                        # Handlers MUST NOT break the main flow
+                        print(f"[EventHandler Error] {handler.__class__.__name__}: {e}")
 
-        # Clean up
-        self._tracked.clear()
+            # Clean up
+            self._tracked.clear()
+        except Exception as e:
+            self._session.rollback()
+            self._tracked.clear()
+            print(f"[Transaction Error] {e}")
 
     def rollback(self) -> None:
         self._session.rollback()

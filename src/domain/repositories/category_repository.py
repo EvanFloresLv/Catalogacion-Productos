@@ -10,7 +10,6 @@ from domain.entities.category import Category
 
 
 class CategoryRepository(ABC):
-    """Write-side repository for Category aggregate."""
 
     @abstractmethod
     def save(self, category: Category) -> None:
@@ -30,4 +29,15 @@ class CategoryRepository(ABC):
 
     @abstractmethod
     def get_by_ids(self, category_ids: List[str]) -> List[Category]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_profiles_by_constraints(
+        self,
+        gender: Optional[str] = None,
+        direction: Optional[str] = None,
+        brand: Optional[str] = None,
+        is_leaf: Optional[bool] = None,
+        limit: Optional[int] = None,
+    ) -> List[Category]:
         raise NotImplementedError

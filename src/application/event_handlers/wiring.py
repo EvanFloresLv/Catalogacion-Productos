@@ -21,7 +21,6 @@ from application.event_handlers.projections import (
 from domain.events.category_events import (
     CategoryCreatedEvent,
     CategoryKeywordsEnhancedEvent,
-    CategoryProfileCreatedEvent,
 )
 from domain.events.product_events import ProductClassifiedEvent
 from domain.events.embedding_events import EmbeddingGeneratedEvent
@@ -39,7 +38,6 @@ def wire_projections(bus: EventBus, session_factory) -> EventBus:
     for event_cls in (
         CategoryCreatedEvent,
         CategoryKeywordsEnhancedEvent,
-        CategoryProfileCreatedEvent,
         ProductClassifiedEvent,
         EmbeddingGeneratedEvent,
     ):
@@ -48,7 +46,6 @@ def wire_projections(bus: EventBus, session_factory) -> EventBus:
     # --- Category Summary ---
     cat_summary = CategorySummaryProjection(session_factory)
     bus.subscribe(CategoryCreatedEvent, cat_summary.on_category_created)
-    bus.subscribe(CategoryProfileCreatedEvent, cat_summary.on_profile_created)
     # bus.subscribe(CategoryKeywordsEnhancedEvent, cat_summary.on_keywords_enhanced)
     bus.subscribe(EmbeddingGeneratedEvent, cat_summary.on_embedding_generated)
 

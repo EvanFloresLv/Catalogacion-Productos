@@ -12,10 +12,10 @@ from domain.repositories.embedding_repository import EmbeddingRepository
 from domain.services.embedding_service import EmbeddingService
 
 from application.services.category_query_service import CategoryQueryService
-from application.dto.queries.category_queries import GetProfilesByConstraintsQuery
+from application.dto.queries.category_queries import GetCategoriesByConstraintsQuery
 
 from domain.entities.result import ClassificationResult, CategoryMatch
-from domain.aggregates.product_classification import ProductClassification
+from domain.aggregates.product_classification_catalog import ProductClassification
 
 from shared.kernel.unit_of_work import UnitOfWork
 
@@ -73,8 +73,8 @@ class ClassifyProductUseCase:
 
             for business in valid_businesses:
 
-                # CQRS read-side: query profiles by constraints
-                query = GetProfilesByConstraintsQuery(
+                # CQRS read-side: query categories by constraints
+                query = GetCategoriesByConstraintsQuery(
                     gender=product.gender,
                     business=business,
                     direction=product.direction,
@@ -82,12 +82,12 @@ class ClassifyProductUseCase:
                     is_leaf=True,
                 )
 
-                matching_profiles = self.category_query_service.get_profiles_by_constraints(query)
+                matching_categories = self.category_query_service.get_categories_by_constraints(query)
 
-                if not matching_profiles:
+                if not matching_categories:
                     continue
 
-                allowed_category_ids = {p.category.id for p in matching_profiles}
+                allowed_category_ids = {c.id for c in matching_categories}
 
                 raw_results = self.embeddings.search_similar(
                     query_vector=query_vector,

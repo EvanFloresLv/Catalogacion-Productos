@@ -7,12 +7,10 @@ from typing import List, Optional, Dict, Any
 
 from application.dto.queries.category_queries import (
     GetCategoryTreeQuery,
-    GetProfilesByConstraintsQuery,
+    GetCategoriesByConstraintsQuery,
 )
 from domain.repositories.category_repository import CategoryRepository
-from domain.repositories.category_profile_repository import CategoryProfileRepository
 from domain.entities.category import Category
-from domain.entities.category_profile import CategoryProfile
 
 
 class CategoryQueryService:
@@ -28,16 +26,10 @@ class CategoryQueryService:
     def __init__(
         self,
         categories: CategoryRepository,
-        profiles: CategoryProfileRepository,
     ):
         self._categories = categories
-        self._profiles = profiles
 
     def get_category_tree(self, query: GetCategoryTreeQuery) -> List[Dict[str, Any]]:
-        """
-        Build a hierarchical tree structure for display.
-        Returns lightweight dicts (not aggregates).
-        """
         all_cats = self._categories.get_all() if hasattr(self._categories, "get_all") else []
 
         cat_map = {c.id: c for c in all_cats}
@@ -67,28 +59,19 @@ class CategoryQueryService:
 
         return [build_node(r) for r in roots]
 
-    def get_profiles_by_constraints(
+    def get_categories_by_constraints(
         self,
-        query: GetProfilesByConstraintsQuery,
-    ) -> List[CategoryProfile]:
-        """
-        Find profiles matching constraint criteria.
-        Delegates to the read-optimized repository method.
-        """
-        return self._profiles.get_profiles_by_constraints(
+        query: GetCategoriesByConstraintsQuery,
+    ) -> List[Category]:
+        return self._categories.get_profiles_by_constraints(
             gender=query.gender,
             direction=query.direction,
             brand=query.brand,
-            business=query.business,
             is_leaf=query.is_leaf,
             limit=query.limit,
         )
 
     def build_category_path(self, category_id: str) -> str:
-        """
-        Build hierarchical path from root to the given category.
-        Returns "Root > Parent > Child > Leaf".
-        """
         path_parts = []
         current_id: Optional[str] = category_id
         max_depth = 10

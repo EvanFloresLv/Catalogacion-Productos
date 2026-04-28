@@ -120,6 +120,10 @@ class EmbeddingClient(EmbeddingService):
                 raise
 
             except Exception as e:
+                # Treat server errors (503, 429, etc.) as transient
+                err_str = str(e).lower()
+                if any(code in err_str for code in ("503", "429", "unavailable", "resource_exhausted", "overloaded")):
+                    raise TransientEmbeddingError(str(e)) from e
                 raise PermanentEmbeddingError(str(e)) from e
 
         return sync_exponential_backoff_retry_sync(

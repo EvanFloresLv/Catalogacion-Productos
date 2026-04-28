@@ -1,6 +1,5 @@
 # Entities
 from .entities.category import Category
-from .entities.category_profile import CategoryProfile
 
 from .entities.result import ClassificationResult, CategoryMatch
 
@@ -10,7 +9,7 @@ from .entities.embedding import Embedding
 
 # Aggregates
 from .aggregates.category_catalog import CategoryCatalog
-from .aggregates.product_classification import ProductClassification
+from .aggregates.product_classification_catalog import ProductClassification
 
 # Value objects
 from .value_objects.semantic_hash import SemanticHash
@@ -20,7 +19,6 @@ from .factories import DomainFactory
 
 __all__ = [
    "Category",
-   "CategoryProfile",
    "ClassificationResult",
    "CategoryMatch",
    "Product",
