@@ -37,7 +37,7 @@ class CategoryModel(Base):
     is_leaf: Mapped[bool | None] = mapped_column(nullable=True)
     group_articles: Mapped[list[str]] = mapped_column(JSONB, nullable=True, default=list)
 
-    brand_id: Mapped[str | None] = mapped_column(
+    brand_name: Mapped[str | None] = mapped_column(
         String(100),
         ForeignKey("brands.name"),
         nullable=True
@@ -45,7 +45,7 @@ class CategoryModel(Base):
 
     brand: Mapped[BrandModel | None] = relationship(
         "BrandModel",
-        foreign_keys=[brand_id],
+        foreign_keys=[brand_name],
         lazy="selectin",
     )
 

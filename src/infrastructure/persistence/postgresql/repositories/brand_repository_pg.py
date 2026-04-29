@@ -118,10 +118,12 @@ class BrandRepositoryPG(BrandRepository):
 
     @staticmethod
     def _to_entity(model: BrandModel) -> Brand:
-        return Brand(
+        brand = Brand(
+            id=model.id,
             name=model.name,
-            business=model.business,
+            business=tuple(model.business or []),
         )
+        return brand
 
 
     # -------------------------------------------------------------

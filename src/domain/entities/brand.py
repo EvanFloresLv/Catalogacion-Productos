@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Tuple
+from uuid import uuid4
 
 from utils.domain_validatons import validate_entity_fields
 
@@ -25,6 +26,7 @@ class Brand:
 
     # Required
     name: str
+    id: str = field(default_factory=lambda: str(uuid4()))
 
     # Immutable + deterministic
     business: Tuple[str, ...] = field(default_factory=tuple)

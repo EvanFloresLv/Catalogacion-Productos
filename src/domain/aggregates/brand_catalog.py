@@ -61,6 +61,7 @@ class BrandCatalog(AggregateRoot):
                 business=brand.business
             ))
 
+        return self._brands
 
     def update_brand(self, name: str, business: Optional[List[str]] = None):
         brand = self._brands.get(name)

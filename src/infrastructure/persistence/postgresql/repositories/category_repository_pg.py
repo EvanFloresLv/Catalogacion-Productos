@@ -192,13 +192,13 @@ class CategoryRepositoryPG(CategoryRepository):
         if "semantic_hash" in model_columns:
             row["semantic_hash"] = category.semantic_hash
 
-        # Resolve brand → brand_id: look up by name or store None
-        if "brand_id" in model_columns:
+        # Resolve brand → brand_name: look up by name or store None
+        if "brand_name" in model_columns:
             brand = category.brand
             if brand is not None:
-                row["brand_id"] = brand.name if hasattr(brand, "name") else str(brand)
+                row["brand_name"] = brand.name if hasattr(brand, "name") else str(brand)
             else:
-                row["brand_id"] = None
+                row["brand_name"] = None
 
         return row
 

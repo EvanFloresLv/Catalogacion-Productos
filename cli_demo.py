@@ -115,18 +115,13 @@ def test_load_brands():
 
 def test_load_file():
 
-    brand = Brand.create(
-        name="Nike",
-        business=["liverpool", "liverpool-blp"],
-    )
-
     with SessionLocal() as session:
         category_repo = CategoryRepositoryPG(session)
         brand_repo = BrandRepositoryPG(session)
         embedding_repo = EmbeddingRepositoryPG(session)
         embedding_service = EmbeddingClient()
 
-        cmd = LoadCategoriesFromFileCommand(file_path="./data/Liverpool.xlsx", brand=brand)
+        cmd = LoadCategoriesFromFileCommand(file_path="./data/Liverpool.xlsx", brand="puma")
         uow = create_unit_of_work(session)
         use_case = LoadCategoriesFromFileUseCase(
             category_repository=category_repo,
@@ -146,4 +141,4 @@ if __name__ == "__main__":
     # test_create_product()
     # test_classification_product()
     test_load_brands()
-    # test_load_file()
+    test_load_file()

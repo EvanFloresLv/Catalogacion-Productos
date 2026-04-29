@@ -53,7 +53,8 @@ class LoadBrandsUseCase:
         catalog = BrandCatalog()
         self.uow.register(catalog)
 
-        saved = catalog.add_brands_batch(brands)
+        catalog.add_brands_batch(brands)
+        saved = self.repo.save_batch(list(catalog.brands))
 
         self.uow.commit()
 

@@ -76,13 +76,19 @@ class LoadCategoriesFromFileUseCase:
     def execute(self, cmd: LoadCategoriesFromFileCommand) -> Dict[str, Any]:
         try:
 
+            name = str(cmd.brand).lower().strip()
+            brand = self.brand_repo.get_by_name(name)
+
+            if not brand:
+                raise ValueError(f"Brand not found: {name}")
+
             xls = pd.ExcelFile(cmd.file_path)
             all_categories = []
 
             for sheet_name in xls.sheet_names:
                 sheet_cmd = LoadCategoriesCommand(
                     data=pd.read_excel(xls, sheet_name=sheet_name),
-                    brand=cmd.brand,
+                    brand=brand.name if brand else None,
                 )
 
                 saved = self.load_categories_uc.execute(sheet_cmd)

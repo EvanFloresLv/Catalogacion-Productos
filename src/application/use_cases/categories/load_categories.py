@@ -30,7 +30,7 @@ from shared.kernel.unit_of_work import UnitOfWork
 @dataclass
 class LoadCategoriesCommand:
     data: pd.DataFrame
-    brand: Brand = None
+    brand: str = None
 
 
 # -------------------------------------------------------------
@@ -79,7 +79,7 @@ class LoadCategoriesUseCase:
     # =========================================================
     # CORE PARSING
     # =========================================================
-    def _process_data(self, df: pd.DataFrame, brand: Brand = None) -> List[Category]:
+    def _process_data(self, df: pd.DataFrame, brand: str = None) -> List[Category]:
 
         df = df.dropna(how="all").dropna(how="all", axis=1)  # Drop empty rows and columns
 
