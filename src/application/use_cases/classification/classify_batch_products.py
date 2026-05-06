@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List
+from typing import Dict
 
 # ---------------------------------------------------------------------
 # Internal application imports
@@ -31,16 +31,36 @@ logger = logging.getLogger(__name__)
 # Command
 # ---------------------------------------------------------------------
 @dataclass(frozen=True)
-class ClassifyProductCommand:
-    product_sku: str
+class ClassifyBatchProductsCommand:
+    product_skus: tuple[str, ...]
     top_k: int = 5
+
+
+# ---------------------------------------------------------------------
+# Result
+# ---------------------------------------------------------------------
+@dataclass(frozen=True)
+class BatchClassificationResult:
+    results: Dict[str, Dict[str, ClassificationResult | None]]
+    failed: Dict[str, str]
+
+    @property
+    def succeeded_count(self) -> int:
+        return len(self.results)
+
+    @property
+    def failed_count(self) -> int:
+        return len(self.failed)
+
+    @property
+    def total(self) -> int:
+        return self.succeeded_count + self.failed_count
 
 
 # ---------------------------------------------------------------------
 # Use Case
 # ---------------------------------------------------------------------
-class ClassifyProductUseCase:
-    """Classifies a product against every eligible business line."""
+class ClassifyBatchProductsUseCase:
 
     def __init__(
         self,
@@ -61,21 +81,36 @@ class ClassifyProductUseCase:
     # -----------------------------------------------------------------
     # Public entry point
     # -----------------------------------------------------------------
-    def execute(self, cmd: ClassifyProductCommand) -> List[ClassificationResult]:
+    def execute(self, cmd: ClassifyBatchProductsCommand) -> BatchClassificationResult:
+        results: Dict[str, Dict[str, ClassificationResult | None]] = {}
+        failed: Dict[str, str] = {}
+
+        for sku in cmd.product_skus:
+            try:
+                classification = self._classify_single(sku, cmd.top_k)
+                results[sku] = classification
+            except Exception as e:
+                logger.exception("Classification failed for SKU %s", sku)
+                failed[sku] = str(e)
+
         try:
-            return self._classify(cmd)
+            self._uow.commit()
         except Exception:
             self._uow.rollback()
-            logger.exception("Classification failed for SKU %s", cmd.product_sku)
-            return []
+            logger.exception("Failed to commit batch classification")
+
+        return BatchClassificationResult(results=results, failed=failed)
 
     # -----------------------------------------------------------------
-    # Core orchestration
+    # Single product classification
     # -----------------------------------------------------------------
-    def _classify(self, cmd: ClassifyProductCommand) -> List[ClassificationResult]:
-        product = self._products.get_by_sku(cmd.product_sku)
+    def _classify_single(
+        self, sku: str, top_k: int,
+    ) -> Dict[str, ClassificationResult | None]:
+
+        product = self._products.get_by_sku(sku)
         if not product:
-            raise ValueError(f"Product with SKU {cmd.product_sku} not found.")
+            raise ValueError(f"Product with SKU {sku} not found.")
 
         classification = ProductClassification(product)
         self._uow.register(classification)
@@ -83,18 +118,12 @@ class ClassifyProductUseCase:
         query_vector = self._embedding_service.generate(product.to_embedding_text())
         businesses = self._resolve_businesses(product)
 
-        results = {
+        return {
             business: self._classify_for_business(
-                classification, product, query_vector, business, cmd.top_k,
+                classification, product, query_vector, business, top_k,
             )
             for business in businesses
         }
-
-        if not results:
-            raise ValueError(f"No eligible matches found for product {product.sku}")
-
-        self._uow.commit()
-        return results
 
     # -----------------------------------------------------------------
     # Business resolution
@@ -146,12 +175,10 @@ class ClassifyProductUseCase:
     def _fetch_allowed_category_ids(self, product, business: str) -> set[str]:
 
         brand = product.brand if "blp" in business else None
-        gender = product.gender if product.gender in ("hombre", "mujer") else None
 
         query = GetCategoriesByConstraintsQuery(
-            # gender=gender,
             business=business,
-            brand=brand if "blp" in business else None,
+            brand=brand,
             is_leaf=True,
         )
 

@@ -10,6 +10,7 @@ dependencies = [
   "pydantic",
   "pydantic-settings",
   "faiss-cpu",
+  "python-multipart"
 ]
 
 [project.optional-dependencies]

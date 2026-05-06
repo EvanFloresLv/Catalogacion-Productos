@@ -20,11 +20,12 @@ from utils.domain_validatons import (
 # Constants / Domain Rules
 # -------------------------------------------------------------
 VALID_PRODUCT_TYPES: dict[str, Tuple[str, ...]] = {
-    "marketplace": ("liverpool", "suburbia"),
-    "marcas propias": ("liverpool",),
+    "marketplace": ("liverpool", "suburbia", "liverpool-blp", "suburbia-blp"),
+    "marcas propias": ("liverpool", "liverpool-blp"),
     "sfera": ("liverpool", "suburbia"),
     "regular": ("liverpool",),
     "suburbia": ("suburbia",),
+    "catmex": ("suburbia",),
     "internet": ("liverpool",),
 }
 
@@ -43,9 +44,8 @@ class Product:
     """
 
     # Required
-    name: str
     sku: str
-    description: str
+    name: str
     brand: str
     direction: str
     product_type: str
@@ -56,6 +56,8 @@ class Product:
     # Optional
     keywords: Tuple[str, ...] = field(default_factory=tuple)
     gender: str | None = None
+    article_group: set[str] | None = None
+    description: str | None = None
 
     # ---------------------------------------------------------
     # Factory
@@ -78,20 +80,16 @@ class Product:
         )
 
         # -----------------------------------------------------
-        # Validate product_type
+        # Validate product_type → resolve business
         # -----------------------------------------------------
-        product_type = validated.get("product_type", "")
+        product_type = validated.pop("product_type")
+        matched_key, business = cls._resolve_business(product_type)
 
-        if product_type and product_type not in VALID_PRODUCT_TYPES:
+        if not business:
             raise ProductError(
                 f"Invalid product_type '{product_type}'. "
                 f"Allowed: {', '.join(sorted(VALID_PRODUCT_TYPES))}"
             )
-
-        # -----------------------------------------------------
-        # Derive business (no external override)
-        # -----------------------------------------------------
-        business = VALID_PRODUCT_TYPES.get(product_type, ())
 
         # -----------------------------------------------------
         # Keyword extraction (deterministic)
@@ -104,9 +102,42 @@ class Product:
 
         return cls(
             **validated,
+            product_type=matched_key,
             business=business,
             keywords=keywords,
         )
+
+    # ---------------------------------------------------------
+    # Business resolution (pure function)
+    # ---------------------------------------------------------
+    @staticmethod
+    def _resolve_business(product_type: str) -> Tuple[str, Tuple[str, ...]]:
+        """
+        Resolve product_type to a canonical key and its business tuple.
+
+        Strategy (priority order):
+          1. Exact match (case-insensitive)
+          2. Longest key contained in the input (avoids 'regular' matching 'irregular')
+
+        Returns (matched_key, business) or ("", ()) if no match.
+        """
+        pt_lower = product_type.lower().strip()
+
+        # 1. Exact match
+        if pt_lower in VALID_PRODUCT_TYPES:
+            return pt_lower, VALID_PRODUCT_TYPES[pt_lower]
+
+        # 2. Longest-key substring match (most specific wins)
+        candidates = [
+            k for k in VALID_PRODUCT_TYPES
+            if k in pt_lower
+        ]
+
+        if not candidates:
+            return "", ()
+
+        best = max(candidates, key=len)
+        return best, VALID_PRODUCT_TYPES[best]
 
     # ---------------------------------------------------------
     # Keyword extraction (pure function)
@@ -122,7 +153,7 @@ class Product:
 
         # From text fields
         for text in (name, description):
-            if not text:
+            if not text or str(text).lower() == "nan":
                 continue
 
             for word in text.split():
@@ -133,6 +164,9 @@ class Product:
         # Explicit keywords
         if explicit:
             tokens.update(normalize_iterable(explicit))
+
+        # Remove "nan" tokens
+        tokens.discard("nan")
 
         return tuple(sorted(tokens))
 

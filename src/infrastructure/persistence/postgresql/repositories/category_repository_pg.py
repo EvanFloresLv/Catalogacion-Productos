@@ -14,13 +14,9 @@ from sqlalchemy.orm import Session
 # Internal application imports
 # ---------------------------------------------------------------------
 from domain.entities.category import Category
-from domain.entities.brand import Brand
 from domain.repositories.category_repository import CategoryRepository
 from infrastructure.persistence.postgresql.models.category_model import (
     CategoryModel,
-)
-from infrastructure.persistence.postgresql.models.brand_model import (
-    BrandModel,
 )
 
 
@@ -58,6 +54,8 @@ class CategoryRepositoryPG(CategoryRepository):
 
         if not categories:
             return []
+
+        print(f"Categories: {categories}")
 
         # Sort by level so parents are inserted before children,
         # preventing FK violations on the self-referencing parent_id.
@@ -128,28 +126,22 @@ class CategoryRepositoryPG(CategoryRepository):
         results = self.session.execute(stmt).scalars().all()
         return self._to_entities(results)
 
-    def get_profiles_by_constraints(
+    def get_categories_by_constraints(
         self,
-        gender: str | None = None,
-        direction: str | None = None,
-        brand: str | None = None,
-        is_leaf: bool | None = None,
         limit: int | None = None,
+        **kwargs,
     ) -> list[Category]:
         stmt = select(CategoryModel)
 
-        if gender is not None:
-            stmt = stmt.where(CategoryModel.gender == gender)
-        if direction is not None:
-            stmt = stmt.where(CategoryModel.direction == direction)
-        if brand is not None:
-            stmt = stmt.join(CategoryModel.brand).where(BrandModel.name == brand)
-        if is_leaf is not None:
-            stmt = stmt.where(CategoryModel.is_leaf == is_leaf)
+        for key, value in kwargs.items():
+            if value is not None:
+                stmt = stmt.where(getattr(CategoryModel, key) == value)
+
         if limit is not None:
             stmt = stmt.limit(limit)
 
         results = self.session.execute(stmt).scalars().all()
+
         return self._to_entities(results)
 
     # ============================================================
@@ -166,10 +158,6 @@ class CategoryRepositoryPG(CategoryRepository):
 
             # Skip computed fields (init=False)
             if not field.init:
-                continue
-
-            # Brand is handled separately via brand_id FK
-            if field.name == "brand":
                 continue
 
             # Skip fields not in the DB model
@@ -191,14 +179,6 @@ class CategoryRepositoryPG(CategoryRepository):
         # Persist derived field explicitly
         if "semantic_hash" in model_columns:
             row["semantic_hash"] = category.semantic_hash
-
-        # Resolve brand → brand_name: look up by name or store None
-        if "brand_name" in model_columns:
-            brand = category.brand
-            if brand is not None:
-                row["brand_name"] = brand.name if hasattr(brand, "name") else str(brand)
-            else:
-                row["brand_name"] = None
 
         return row
 
@@ -224,18 +204,7 @@ class CategoryRepositoryPG(CategoryRepository):
 
         kwargs: dict = {}
         for field_name in init_fields:
-            if field_name == "brand":
-                # Reconstruct Brand entity from the BrandModel relationship
-                brand_model = model.brand
-                kwargs["brand"] = (
-                    Brand(
-                        name=brand_model.name,
-                        business=tuple(brand_model.business or []),
-                    )
-                    if brand_model is not None
-                    else None
-                )
-            elif hasattr(model, field_name):
+            if hasattr(model, field_name):
                 kwargs[field_name] = getattr(model, field_name)
 
         return Category(**kwargs)

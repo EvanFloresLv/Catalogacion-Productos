@@ -32,10 +32,11 @@ class CategoryRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_profiles_by_constraints(
+    def get_categories_by_constraints(
         self,
         gender: Optional[str] = None,
         direction: Optional[str] = None,
+        business: Optional[str] = None,
         brand: Optional[str] = None,
         is_leaf: Optional[bool] = None,
         limit: Optional[int] = None,

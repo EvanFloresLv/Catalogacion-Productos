@@ -29,6 +29,7 @@ class CategoryQueryService:
     ):
         self._categories = categories
 
+
     def get_category_tree(self, query: GetCategoryTreeQuery) -> List[Dict[str, Any]]:
         all_cats = self._categories.get_all() if hasattr(self._categories, "get_all") else []
 
@@ -59,17 +60,20 @@ class CategoryQueryService:
 
         return [build_node(r) for r in roots]
 
+
     def get_categories_by_constraints(
         self,
         query: GetCategoriesByConstraintsQuery,
     ) -> List[Category]:
-        return self._categories.get_profiles_by_constraints(
+        return self._categories.get_categories_by_constraints(
             gender=query.gender,
-            direction=query.direction,
+            direction=query.direction,             # Direction won't be used for this iteration
+            business=query.business,
             brand=query.brand,
             is_leaf=query.is_leaf,
             limit=query.limit,
         )
+
 
     def build_category_path(self, category_id: str) -> str:
         path_parts = []

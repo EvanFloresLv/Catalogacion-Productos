@@ -2,6 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 from dataclasses import dataclass
+from typing import List
 
 # ---------------------------------------------------------------------
 # Internal application imports
@@ -14,8 +15,8 @@ from shared.kernel.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True)
-class LoadProductCommand:
-    products: list[dict]
+class LoadProductsCommand:
+    products: List[Product]
 
 
 class LoadProductsUseCase:
@@ -28,19 +29,16 @@ class LoadProductsUseCase:
         self.repo = repo
         self.uow = uow
 
-    def execute(self, cmd: LoadProductCommand) -> list[Product]:
+
+    def execute(self, cmd: LoadProductsCommand) -> List[Product]:
 
         catalog = ProductCatalog()
         self.uow.register(catalog)
 
-        products = [
-            Product.create(**product_data)
-            for product_data in cmd.products
-        ]
-
-        catalog.add_products_batch(products)
-        saved = self.repo.save_batch(catalog.products)
+        catalog.add_products_batch(cmd.products)
+        _ = self.repo.save_batch(catalog.products)
 
         self.uow.commit()
 
-        return saved
+        return catalog.products
+

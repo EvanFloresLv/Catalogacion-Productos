@@ -60,7 +60,10 @@ class ProductRepositoryPG(ProductRepository):
 
         values = [
             {
-                field.name: getattr(p, field.name)
+                field.name: (
+                    list(v) if isinstance(v := getattr(p, field.name), (set, frozenset))
+                    else v
+                )
                 for field in fields(Product)
             }
             for p in products

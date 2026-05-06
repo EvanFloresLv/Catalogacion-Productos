@@ -50,6 +50,9 @@ class Brand:
                 "business must be an iterable (e.g. tuple/list), not str"
             )
 
+        if not business_values:
+            raise ValueError("At least one business value is required.")
+
         invalid = [b for b in business_values if b not in BUSINESS]
         if invalid:
             raise ValueError(f"Invalid business values: {invalid}")

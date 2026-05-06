@@ -1,8 +1,11 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
+import re
+import json
+import unicodedata
+from typing import List, Dict, Any
 from dataclasses import dataclass
-from typing import Dict, Any
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -12,7 +15,7 @@ import pandas as pd
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
-from domain.entities.brand import Brand
+from domain.entities.category import Category
 
 from domain.repositories.category_repository import CategoryRepository
 from domain.repositories.brand_repository import BrandRepository
@@ -36,20 +39,31 @@ from application.use_cases.embeddings.load_embeddings import (
 @dataclass
 class LoadCategoriesFromFileCommand:
     file_path: str
-    brand: Brand = None  # Optional brand to assign to all categories in the file
+    business: str         # Optional business field for all categories
+    brand: str = None     # Brand name to (BLP - Brand Landing Page)
 
 
 # ---------------------------------------------------------------------
 # Use Case
 # ---------------------------------------------------------------------
 class LoadCategoriesFromFileUseCase:
-    """
-    Orchestrator use case that coordinates loading categories and embeddings.
 
-    Architecture:
-      - Delegates to LoadCategoriesUseCase.execute() per sheet
-      - Final embedding generation aggregates all saved categories
-    """
+    ALLOWED = [
+        "catid",
+        "level",
+        "keywords",
+        "metadescripción",
+        "contra",
+        "género",
+        "grupo",
+    ]
+
+    BUSINESS = [
+        "liverpool",
+        "suburbia",
+        "liverpool-blp",
+        "suburbia-blp",
+    ]
 
     def __init__(
         self,
@@ -73,45 +87,42 @@ class LoadCategoriesFromFileUseCase:
             uow=uow,
         )
 
+
     def execute(self, cmd: LoadCategoriesFromFileCommand) -> Dict[str, Any]:
         try:
-
-            name = str(cmd.brand).lower().strip()
-            brand = self.brand_repo.get_by_name(name)
-
-            if not brand:
-                raise ValueError(f"Brand not found: {name}")
 
             xls = pd.ExcelFile(cmd.file_path)
             all_categories = []
 
+            if str(cmd.business).strip().lower() not in self.BUSINESS:
+                raise ValueError(f"Invalid business: {cmd.business}. Allowed: {self.BUSINESS}")
+
             for sheet_name in xls.sheet_names:
-                sheet_cmd = LoadCategoriesCommand(
-                    data=pd.read_excel(xls, sheet_name=sheet_name),
-                    brand=brand.name if brand else None,
-                )
+                sheet = pd.read_excel(xls, sheet_name=sheet_name)
+                data = self._process_data(sheet, business=cmd.business, brand=cmd.brand)
 
-                saved = self.load_categories_uc.execute(sheet_cmd)
-
-                if saved:
-                    all_categories.extend(saved)
-                    print(f"  {sheet_name}: {len(saved)} categories")
+                if data:
+                    all_categories.extend(data)
 
             if not all_categories:
                 return self._empty_result()
 
+            categories = self.load_categories_uc.execute(
+                LoadCategoriesCommand(categories=all_categories)
+            )
+
             embeddings = self.load_embeddings_uc.execute(
-                LoadEmbeddingsCommand(categories=all_categories)
+                LoadEmbeddingsCommand(categories=categories)
             )
 
             return {
-                "categories": all_categories,
+                "categories": categories,
                 "embeddings": embeddings,
             }
 
-        except Exception:
+        except Exception as e:
             self.uow.rollback()
-            raise
+            raise e
 
     @staticmethod
     def _empty_result():
@@ -119,3 +130,167 @@ class LoadCategoriesFromFileUseCase:
             "categories": [],
             "embeddings": [],
         }
+
+    def _process_data(self, df: pd.DataFrame, business: str, brand: str = None) -> List[Category]:
+
+        df = df.dropna(how="all").dropna(how="all", axis=1)  # Drop empty rows and columns
+
+        if df.empty:
+            return []
+
+        df.columns = [str(c).replace(" ", "_").strip() for c in df.columns]
+
+        lower_cols = [c.lower() for c in df.columns]
+
+        if "catid" not in lower_cols:
+            return []
+
+        cat_idx = lower_cols.index("catid")
+        df.columns = (
+            [f"level_{i}" for i in range(1, cat_idx + 1)]
+            + list(df.columns[cat_idx:])
+        )
+
+        df.columns = [c.lower() for c in df.columns]
+
+        columns_to_delete = [
+            col for col in df.columns
+            if not any(keyword in col for keyword in self.ALLOWED)
+        ]
+
+        df.drop(columns=columns_to_delete, inplace=True)
+
+        max_level = max(
+                int(col.split("_")[-1]) for col in df.columns
+                if col.startswith("level_")
+            ) if df.columns.str.startswith("level_").any() else 0
+
+        last_parent: Dict[int, str] = {}
+        seen: Dict[str, Category] = {}
+
+        for row in df.itertuples(index=False):
+
+            row_dict = {
+                k: v for k, v in row._asdict().items() if pd.notna(v)
+            }
+
+            level_key = next((k for k in row_dict if "level" in k), None)
+            id_key = next((k for k in row_dict if "catid" in k.lower()), None)
+
+            if not level_key or not id_key:
+                continue
+
+            level = int(re.search(r"\d+", level_key).group())
+            name = str(row_dict[level_key]).strip()
+            cat_id = str(row_dict[id_key]).strip()
+
+            if not name or not cat_id:
+                continue
+
+            parent_id = last_parent.get(level - 1)
+            last_parent[level] = cat_id
+
+            meta_key = self._find(row_dict, "meta")
+            desc_key = self._find(row_dict, "descripcion")
+            kw_key = self._find(row_dict, "keyword")
+            ga_key = self._find(row_dict, "artículos")
+            gend_key = self._find(row_dict, "género")
+
+            group_articles = self._get_group_articles(row_dict.get(ga_key, None)) if ga_key else None
+
+            titulo = self._clean(row_dict.get(meta_key, "")) if meta_key else ""
+            descripcion = self._clean(row_dict.get(desc_key, "")) if desc_key else ""
+
+            palabras = row_dict.get(kw_key, []) if kw_key else []
+            if isinstance(palabras, str):
+                try:
+                    palabras = json.loads(palabras)
+                except json.JSONDecodeError:
+                    palabras = [palabras]
+
+            category = Category.create(
+                id=cat_id,
+                name=name,
+                level=level,
+
+                parent_id=parent_id,
+                is_leaf=(level == max_level),
+
+                description=descripcion,
+                gender=row_dict.get(gend_key, None),
+                direction=None,
+                brand=brand,
+                group_articles=group_articles,
+                business=business,
+
+                keywords=self._extract_keywords(
+                    titulo, descripcion, palabras
+                )
+            )
+
+            if not category:
+                continue
+
+            # Deduplicate in O(1)
+            seen[cat_id] = category
+
+        result = list(seen.values())
+
+        return result
+
+
+    @staticmethod
+    def _extract_keywords(
+        titulo: str,
+        descripcion: str,
+        palabras: Any,
+    ) -> List[str]:
+        pattern = r"[A-Za-zÁÉÍÓÚáéíóúÑñ]+"
+        extracted = []
+
+        # Words parsing (can be JSON string, list, etc.)
+        if isinstance(palabras, str):
+            try:
+                palabras = json.loads(palabras)
+            except Exception:
+                palabras = [palabras]
+
+        if isinstance(palabras, (list, tuple, set)):
+            for p in palabras:
+                if isinstance(p, str):
+                    extracted.extend(re.findall(pattern, p.lower()))
+
+        extracted.extend(re.findall(pattern, titulo.lower()))
+        extracted.extend(re.findall(pattern, descripcion.lower()))
+
+        return list(dict.fromkeys(extracted))
+
+
+    @staticmethod
+    def _get_group_articles(groups):
+        groups = groups.split(",")
+        group_nums = []
+        seen = set()
+
+        for g in groups:
+            num = re.search(r'\d+', g.strip())
+            if num and num.group() not in seen:
+                seen.add(num.group())
+                group_nums.append(num.group())
+
+        return group_nums
+
+
+    @staticmethod
+    def _clean(x):
+        x = unicodedata.normalize("NFKD", str(x))
+        x = re.sub(r"http\S+|www\S+", "", x)
+        x = re.sub(r"[^a-zA-Z0-9\s_-]", "", x)
+        return x.strip().lower()
+
+
+    @staticmethod
+    def _find(row_dict, keyword):
+        return next(
+            (k for k in row_dict if keyword in k.lower()), None
+        )

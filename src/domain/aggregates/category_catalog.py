@@ -96,6 +96,7 @@ class CategoryCatalog(AggregateRoot):
                     brand=cat.brand,
                     is_leaf=cat.is_leaf,
                     group_articles=cat.group_articles,
+                    business=cat.business,
                 )
 
                 self._categories[cat.id] = new_cat

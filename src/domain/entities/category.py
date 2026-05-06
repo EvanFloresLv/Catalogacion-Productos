@@ -33,13 +33,16 @@ class Category:
     # Optional fields
     # ---------------------------------------------------------
     parent_id: str | None = None
+    is_leaf: bool | None = None
+
     description: str | None = None
-    semantic_hash: str = ""
     gender: str | None = None
     direction: str | None = None
-    brand: Brand | None = None
-    is_leaf: bool | None = None
+    brand: str | None = None
     group_articles: list[int] | None = None
+
+    business: str = ""
+    semantic_hash: str = ""
 
     # ---------------------------------------------------------
     # Structured fields
@@ -52,24 +55,27 @@ class Category:
     @classmethod
     def create(cls, **data: Any) -> "Category":
 
-        validated = validate_entity_fields(
-            cls,
-            data,
-            required_fields={"id", "name", "level"},
-            to_remove={"semantic_hash"},
-        )
-
-        cls._validate(validated)
-
-        semantic_hash = SemanticHash.from_text(
-            cls._build_embedding_text(
-                name=validated["name"],
-                description=validated.get("description", ""),
-                keywords=validated.get("keywords", ()),
+        try:
+            validated = validate_entity_fields(
+                cls,
+                data,
+                required_fields={"id", "name", "level"},
+                to_remove={"semantic_hash"},
             )
-        ).value
 
-        return cls(**validated, semantic_hash=semantic_hash)
+            cls._validate(validated)
+
+            semantic_hash = SemanticHash.from_text(
+                cls._build_embedding_text(
+                    name=validated["name"],
+                    description=validated.get("description", ""),
+                    keywords=validated.get("keywords", ()),
+                )
+            ).value
+
+            return cls(**validated, semantic_hash=semantic_hash)
+        except Exception as e:
+            return None
 
     # ---------------------------------------------------------
     # Validation

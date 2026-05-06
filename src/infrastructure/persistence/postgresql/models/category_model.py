@@ -14,7 +14,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 # Internal application imports
 # ---------------------------------------------------------------------
 from infrastructure.persistence.postgresql.base import Base
-from infrastructure.persistence.postgresql.models.brand_model import BrandModel
 
 
 class CategoryModel(Base):
@@ -37,17 +36,8 @@ class CategoryModel(Base):
     is_leaf: Mapped[bool | None] = mapped_column(nullable=True)
     group_articles: Mapped[list[str]] = mapped_column(JSONB, nullable=True, default=list)
 
-    brand_name: Mapped[str | None] = mapped_column(
-        String(100),
-        ForeignKey("brands.name"),
-        nullable=True
-    )
-
-    brand: Mapped[BrandModel | None] = relationship(
-        "BrandModel",
-        foreign_keys=[brand_name],
-        lazy="selectin",
-    )
+    brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    business: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     parent_id: Mapped[str | None] = mapped_column(
         String(36),
