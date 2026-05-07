@@ -187,7 +187,7 @@ def test_classification_batch_products():
         result = use_case.execute(cmd)
 
         for product in cmd.product_skus:
-            print(f"\n✓ Product {product_repo.get_by_sku(product)} classification results:")
+            print(f"\n✓ Product {product_repo.get_by_sku(product)}")
             print(f"\n✓ Classification: {result.results.get(product)}")
 
         if result.failed:
@@ -200,5 +200,5 @@ if __name__ == "__main__":
     # test_load_file()
     # test_load_products()
     # test_load_brands()
-    test_classification_product()
-    # test_classification_batch_products()
+    # test_classification_product()
+    test_classification_batch_products()

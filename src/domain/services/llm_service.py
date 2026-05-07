@@ -8,7 +8,6 @@ from typing import Any, Dict, Optional
 
 
 class LLMService(ABC):
-    """Port for Large Language Model interactions."""
 
     @abstractmethod
     def chat(

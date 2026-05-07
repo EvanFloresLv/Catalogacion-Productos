@@ -10,6 +10,8 @@ from typing import Dict
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
+from domain.entities.product import Product
+
 from domain.repositories.product_repository import ProductRepository
 from domain.repositories.brand_repository import BrandRepository
 from domain.repositories.embedding_repository import EmbeddingRepository
@@ -61,6 +63,7 @@ class BatchClassificationResult:
 # Use Case
 # ---------------------------------------------------------------------
 class ClassifyBatchProductsUseCase:
+    """Classifies multiple products using the same logic as ClassifyProductUseCase."""
 
     def __init__(
         self,
@@ -102,7 +105,7 @@ class ClassifyBatchProductsUseCase:
         return BatchClassificationResult(results=results, failed=failed)
 
     # -----------------------------------------------------------------
-    # Single product classification
+    # Single product classification (mirrors ClassifyProductUseCase)
     # -----------------------------------------------------------------
     def _classify_single(
         self, sku: str, top_k: int,
@@ -128,7 +131,7 @@ class ClassifyBatchProductsUseCase:
     # -----------------------------------------------------------------
     # Business resolution
     # -----------------------------------------------------------------
-    def _resolve_businesses(self, product) -> set[str]:
+    def _resolve_businesses(self, product: Product) -> set[str]:
         product_businesses = set(product.business)
         brand = self._brands.get_by_name(product.brand)
 
@@ -143,7 +146,7 @@ class ClassifyBatchProductsUseCase:
     def _classify_for_business(
         self,
         classification: ProductClassification,
-        product,
+        product: Product,
         query_vector,
         business: str,
         top_k: int,
@@ -170,21 +173,59 @@ class ClassifyBatchProductsUseCase:
         )
 
     # -----------------------------------------------------------------
-    # Helpers
+    # Category fetching with fallback strategy
     # -----------------------------------------------------------------
-    def _fetch_allowed_category_ids(self, product, business: str) -> set[str]:
-
+    def _fetch_allowed_category_ids(self, product: Product, business: str) -> set[str]:
         brand = product.brand if "blp" in business else None
+        gender = product.gender if product.gender in ("hombre", "mujer") else None
 
-        query = GetCategoriesByConstraintsQuery(
+        # Strategy 1: Full constraints (article_group has highest priority)
+        if product.article_group:
+            categories = self._query_categories(
+                article_group=list(product.article_group),
+                business=business,
+                gender=gender,
+                brand=brand,
+                is_leaf=True,
+            )
+            if categories:
+                return categories
+
+            # Strategy 2: Drop gender, keep article_group
+            categories = self._query_categories(
+                article_group=list(product.article_group),
+                business=business,
+                brand=brand,
+                is_leaf=True,
+            )
+            if categories:
+                return categories
+
+        # Strategy 3: Drop article_group, use gender
+        categories = self._query_categories(
+            business=business,
+            gender=gender,
+            brand=brand,
+            is_leaf=True,
+        )
+        if categories:
+            return categories
+
+        # Strategy 4: Broadest — just business + is_leaf
+        return self._query_categories(
             business=business,
             brand=brand,
             is_leaf=True,
         )
 
+    def _query_categories(self, **kwargs) -> set[str]:
+        query = GetCategoriesByConstraintsQuery(**kwargs)
         categories = self._category_query_service.get_categories_by_constraints(query)
         return {c.id for c in categories} if categories else set()
 
+    # -----------------------------------------------------------------
+    # Helpers
+    # -----------------------------------------------------------------
     def _build_category_matches(
         self, raw_results: list,
     ) -> list[CategoryMatch]:

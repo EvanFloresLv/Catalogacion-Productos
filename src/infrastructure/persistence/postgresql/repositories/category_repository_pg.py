@@ -2,7 +2,6 @@
 # Standard library
 # ---------------------------------------------------------------------
 from dataclasses import fields
-from collections.abc import Sequence
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -10,7 +9,6 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 
 # ---------------------------------------------------------------------
 # Internal application imports
@@ -128,7 +126,6 @@ class CategoryRepositoryPG(CategoryRepository):
         results = self.session.execute(stmt).scalars().all()
         return self._to_entities(results)
 
-
     def get_categories_by_constraints(
         self,
         gender: str | None = None,
@@ -136,67 +133,27 @@ class CategoryRepositoryPG(CategoryRepository):
         business: str | None = None,
         brand: str | None = None,
         is_leaf: bool | None = None,
-        article_group: Sequence[str] | None = None,
+        article_group: list[str] | None = None,
         limit: int | None = None,
     ) -> list[Category]:
-
-        base_stmt = select(CategoryModel)
-        filters = []
+        stmt = select(CategoryModel)
 
         if article_group:
-            filters.append(
-                CategoryModel.group_articles.overlap(article_group)
-            )
-        else:
-            optional_filters = [
-                (CategoryModel.gender, gender),
-                (CategoryModel.direction, direction),
-                (CategoryModel.business, business),
-                (CategoryModel.brand, brand),
-                (CategoryModel.is_leaf, is_leaf),
-            ]
-
-            filters.extend(
-                column == value
-                for column, value in optional_filters
-                if value is not None
-            )
-
-        stmt = base_stmt.where(and_(*filters))
-
+            stmt = stmt.where(CategoryModel.article_group.overlap(article_group))
+        if gender is not None:
+            stmt = stmt.where(CategoryModel.gender == gender)
+        if direction is not None:
+            stmt = stmt.where(CategoryModel.direction == direction)
+        if business is not None:
+            stmt = stmt.where(CategoryModel.business == business)
+        if brand is not None:
+            stmt = stmt.where(CategoryModel.brand == brand)
+        if is_leaf is not None:
+            stmt = stmt.where(CategoryModel.is_leaf == is_leaf)
         if limit is not None:
             stmt = stmt.limit(limit)
 
         results = self.session.execute(stmt).scalars().all()
-
-        if not results and not article_group:
-
-            print("No results found with primary filters, applying fallback strategy...")
-
-            fallback_filters = [
-                CategoryModel.group_articles.is_(None),
-                CategoryModel.gender.is_(None),
-                CategoryModel.direction.is_(None),
-            ]
-
-            if business is not None:
-                fallback_filters.append(CategoryModel.business == business)
-
-            if brand is not None:
-                fallback_filters.append(CategoryModel.brand == brand)
-
-            if is_leaf is not None:
-                fallback_filters.append(CategoryModel.is_leaf == is_leaf)
-
-            fallback_stmt = base_stmt.where(and_(*fallback_filters))
-
-            if limit is not None:
-                fallback_stmt = fallback_stmt.limit(limit)
-
-            results = self.session.execute(
-                fallback_stmt
-            ).scalars().all()
-
         return self._to_entities(results)
 
     # ============================================================

@@ -9,17 +9,21 @@ import logging
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from google.auth import default
 
 # ---------------------------------------------------------------------
-# Internal application imports
+# Settings
 # ---------------------------------------------------------------------
 
 
-class LLMSettings(BaseModel):
+class LLMSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="LLM_",
+        extra="ignore",
+    )
+
     provider: str = "gemini"
 
-    model: str = "gemini-2.5-flash"  # Default model
+    model: str = ""
     model_fast: str = "gemini-2.5-flash"
     model_pro: str = "gemini-2.5-pro"
 
@@ -35,14 +39,16 @@ class GoogleCredentials(BaseModel):
 
     @classmethod
     def from_default(cls):
-        credentials, project_id = default()
-        return cls(credentials=credentials, project_id=project_id)
+        try:
+            from google.auth import default
+            credentials, project_id = default()
+            return cls(credentials=credentials, project_id=project_id)
+        except Exception:
+            return cls()
 
 
 class GeminiGenerationSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_nested_delimiter="_",
-        env_nested_max_split=2,
         env_prefix="LLM_",
         extra="ignore",
     )
@@ -55,14 +61,12 @@ class GeminiGenerationSettings(BaseSettings):
 
 class LoggingSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_nested_delimiter="_",
-        env_nested_max_split=2,
-        env_prefix="LOGGING_",
+        env_prefix="LOGS_",
         extra="ignore",
     )
 
     directory: str = "logs"
-    name: str = "app"
+    name: str = "ProductRouting"
     level: str = "INFO"
 
     module_levels: dict[str, str] = {
@@ -94,11 +98,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "course-notes-ai"
+    app_name: str = "ProductRouting"
     environment: str = "local"
 
-    # DB
-    database_url: str = "sqlite:///./app.db"
+    database_url: str = "postgresql+psycopg://postgres:admin@localhost:5432/product_routing"
 
 
 settings = Settings()

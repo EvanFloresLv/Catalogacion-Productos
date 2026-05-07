@@ -8,7 +8,6 @@ from typing import List, Sequence
 
 
 class EmbeddingService(ABC):
-    """Port for embedding generation (vector representation of text)."""
 
     @abstractmethod
     def generate(self, text: str) -> List[float]:

@@ -8,13 +8,12 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# ---------------------------------------------------------------------
+# ----------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
+from config.settings import settings
 
-DATABASE_URL = "postgresql+psycopg://postgres:admin@localhost:5432/product_routing"
-
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(settings.database_url, echo=False)
 
 SessionLocal = sessionmaker(
     autocommit=False,

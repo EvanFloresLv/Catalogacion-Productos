@@ -42,7 +42,6 @@ class ClassifyProductCommand:
 # Use Case
 # ---------------------------------------------------------------------
 class ClassifyProductUseCase:
-    """Classifies a product against every eligible business line."""
 
     def __init__(
         self,
@@ -146,18 +145,51 @@ class ClassifyProductUseCase:
     # Helpers
     # -----------------------------------------------------------------
     def _fetch_allowed_category_ids(self, product: Product, business: str) -> set[str]:
-
         brand = product.brand if "blp" in business else None
         gender = product.gender if product.gender in ("hombre", "mujer") else None
 
-        query = GetCategoriesByConstraintsQuery(
-            gender=gender,
+        # Strategy 1: Full constraints (article_group has highest priority)
+        if product.article_group:
+            categories = self._query_categories(
+                article_group=list(product.article_group) if product.article_group else None,
+                business=business,
+                gender=gender,
+                brand=brand,
+                is_leaf=True,
+            )
+
+            if categories:
+                return categories
+
+            # Strategy 2: Drop gender, keep article_group
+            categories = self._query_categories(
+                article_group=list(product.article_group) if product.article_group else None,
+                business=business,
+                brand=brand,
+                is_leaf=True,
+            )
+            if categories:
+                return categories
+
+        # Strategy 3: Drop article_group, use gender
+        categories = self._query_categories(
             business=business,
-            article_group=product.article_group,
-            brand=brand if "blp" in business else None,
+            gender=gender,
+            brand=brand,
+            is_leaf=True,
+        )
+        if categories:
+            return categories
+
+        # Strategy 4: Broadest — just business + is_leaf
+        return self._query_categories(
+            business=business,
+            brand=brand,
             is_leaf=True,
         )
 
+    def _query_categories(self, **kwargs) -> set[str]:
+        query = GetCategoriesByConstraintsQuery(**kwargs)
         categories = self._category_query_service.get_categories_by_constraints(query)
         return {c.id for c in categories} if categories else set()
 
