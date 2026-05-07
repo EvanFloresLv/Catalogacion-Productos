@@ -66,8 +66,9 @@ class CategoryQueryService:
         query: GetCategoriesByConstraintsQuery,
     ) -> List[Category]:
         return self._categories.get_categories_by_constraints(
+            article_group=query.article_group,          # Article group has the greatest hierarchy
             gender=query.gender,
-            direction=query.direction,             # Direction won't be used for this iteration
+            direction=query.direction,                  # Direction won't be used for this iteration
             business=query.business,
             brand=query.brand,
             is_leaf=query.is_leaf,

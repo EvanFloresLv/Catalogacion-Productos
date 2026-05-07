@@ -6,8 +6,8 @@ from __future__ import annotations
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import String, ForeignKey, UniqueConstraint, Integer, Column
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import String, Text, ForeignKey, UniqueConstraint, Integer, Column
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # ---------------------------------------------------------------------
@@ -34,7 +34,7 @@ class CategoryModel(Base):
     gender: Mapped[str | None] = mapped_column(String(50), nullable=True)
     direction: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_leaf: Mapped[bool | None] = mapped_column(nullable=True)
-    group_articles: Mapped[list[str]] = mapped_column(JSONB, nullable=True, default=list)
+    group_articles: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
 
     brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     business: Mapped[str | None] = mapped_column(String(100), nullable=True)

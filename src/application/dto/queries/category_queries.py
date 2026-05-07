@@ -4,17 +4,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
 
 @dataclass(frozen=True)
 class GetCategoryTreeQuery:
-    """Query to get a category tree."""
     root_category_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class GetCategoriesByConstraintsQuery:
-    """Query to find categories matching constraints."""
+    article_group: Optional[List[str]] = None
     gender: Optional[str] = None
     brand: Optional[str] = None
     direction: Optional[str] = None

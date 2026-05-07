@@ -39,6 +39,7 @@ class CategoryRepository(ABC):
         business: Optional[str] = None,
         brand: Optional[str] = None,
         is_leaf: Optional[bool] = None,
+        article_group: Optional[List[str]] = None,
         limit: Optional[int] = None,
     ) -> List[Category]:
         raise NotImplementedError

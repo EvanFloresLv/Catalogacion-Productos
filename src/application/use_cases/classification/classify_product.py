@@ -10,6 +10,8 @@ from typing import List
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
+from domain.entities.product import Product
+
 from domain.repositories.product_repository import ProductRepository
 from domain.repositories.brand_repository import BrandRepository
 from domain.repositories.embedding_repository import EmbeddingRepository
@@ -99,7 +101,7 @@ class ClassifyProductUseCase:
     # -----------------------------------------------------------------
     # Business resolution
     # -----------------------------------------------------------------
-    def _resolve_businesses(self, product) -> set[str]:
+    def _resolve_businesses(self, product: Product) -> set[str]:
         product_businesses = set(product.business)
         brand = self._brands.get_by_name(product.brand)
 
@@ -143,14 +145,15 @@ class ClassifyProductUseCase:
     # -----------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------
-    def _fetch_allowed_category_ids(self, product, business: str) -> set[str]:
+    def _fetch_allowed_category_ids(self, product: Product, business: str) -> set[str]:
 
         brand = product.brand if "blp" in business else None
         gender = product.gender if product.gender in ("hombre", "mujer") else None
 
         query = GetCategoriesByConstraintsQuery(
-            # gender=gender,
+            gender=gender,
             business=business,
+            article_group=product.article_group,
             brand=brand if "blp" in business else None,
             is_leaf=True,
         )

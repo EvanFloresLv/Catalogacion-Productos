@@ -139,7 +139,7 @@ def test_classification_product():
     with SessionLocal() as session:
         product_repo = ProductRepositoryPG(session)
 
-        cmd = ClassifyProductCommand(product_sku="99994779069", top_k=5)
+        cmd = ClassifyProductCommand(product_sku="1196142564", top_k=5)
 
         category_repo = CategoryRepositoryPG(session)
         category_query_service = CategoryQueryService(categories=category_repo)
@@ -197,8 +197,8 @@ def test_classification_batch_products():
 
 
 if __name__ == "__main__":
-    test_load_file()
-    test_load_products()
-    test_load_brands()
+    # test_load_file()
+    # test_load_products()
+    # test_load_brands()
     test_classification_product()
-    test_classification_batch_products()
+    # test_classification_batch_products()
