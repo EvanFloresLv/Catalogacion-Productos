@@ -99,6 +99,9 @@ class Category:
 
             if field_name == "keywords_json":
                 normalized[field_name] = _normalize_keywords(value)
+            elif field_name == "id":
+                match = re.search(r"cat.+", str(value))
+                normalized[field_name] = match.group() if match else str(value)
             elif isinstance(value, str) or value is None:
                 normalized[field_name] = _normalize_text(value)
             else:
