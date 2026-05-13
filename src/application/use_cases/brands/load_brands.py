@@ -1,6 +1,7 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
+import logging
 from typing import List, Dict, Any
 from dataclasses import dataclass
 
@@ -19,6 +20,9 @@ from domain.aggregates.brand_catalog import BrandCatalog
 
 from shared.kernel.unit_of_work import UnitOfWork
 
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------
 # Command
@@ -42,20 +46,31 @@ class LoadBrandsUseCase:
     # PUBLIC
     # =========================================================
     def execute(self, cmd: LoadBrandsCommand) -> Dict[str, Any]:
-        brands = self._process_data(cmd.data)
 
-        if not brands:
-            return None
+        try:
+            logger.info(f"Loading brands from data with {len(cmd.data)} rows and {len(cmd.data.columns)} columns")
 
-        catalog = BrandCatalog()
-        self.uow.register(catalog)
+            brands = self._process_data(cmd.data)
 
-        catalog.add_brands_batch(brands)
-        saved = self.repo.save_batch(list(catalog.brands))
+            if not brands:
+                return None
 
-        self.uow.commit()
+            catalog = BrandCatalog()
+            self.uow.register(catalog)
 
-        return saved
+            catalog.add_brands_batch(brands)
+            saved = self.repo.save_batch(list(catalog.brands))
+
+            self.uow.commit()
+
+            logger.info(f"Successfully loaded brands: {len(catalog.brands)}")
+
+            return saved
+
+        except Exception as e:
+            logger.error(f"Error loading brands: {e}")
+            self.uow.rollback()
+            raise e
 
     # =========================================================
     # CORE PARSING

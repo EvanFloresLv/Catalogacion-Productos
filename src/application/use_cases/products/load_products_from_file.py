@@ -2,10 +2,8 @@
 # Standard library
 # ---------------------------------------------------------------------
 import re
-import json
-import warnings
-import unicodedata
-from typing import List, Dict, Any, Iterable
+import logging
+from typing import List, Any, Iterable
 from dataclasses import dataclass
 
 # ---------------------------------------------------------------------
@@ -26,6 +24,9 @@ from application.use_cases.products.load_products import (
     LoadProductsUseCase,
     LoadProductsCommand,
 )
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------
 # Command
@@ -59,6 +60,9 @@ class LoadProductsFromFileUseCase:
     def execute(self, cmd: LoadProductsFromFileCommand) -> List[Product]:
 
         try:
+
+            logger.info(f"Loading products from file: {cmd.file_path}")
+
             data = pd.read_excel(cmd.file_path, sheet_name=0, engine="openpyxl")
 
             column_map = self.map_columns(data, self.TARGETS)
@@ -80,9 +84,13 @@ class LoadProductsFromFileUseCase:
             products = self.load_products_uc.execute(
                 LoadProductsCommand(products=all_products)
             )
+
+            logger.info(f"Successfully loaded products: {len(products)}")
+
             return [product.sku for product in products]
 
         except Exception as e:
+            logger.error(f"Error loading products from file: {e}")
             self.uow.rollback()
             raise e
 

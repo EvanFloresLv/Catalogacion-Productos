@@ -1,6 +1,7 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
+import logging
 from dataclasses import dataclass
 from typing import List
 
@@ -12,6 +13,10 @@ from domain.repositories.product_repository import ProductRepository
 from domain.aggregates.product_catalog import ProductCatalog
 
 from shared.kernel.unit_of_work import UnitOfWork
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -32,13 +37,22 @@ class LoadProductsUseCase:
 
     def execute(self, cmd: LoadProductsCommand) -> List[Product]:
 
-        catalog = ProductCatalog()
-        self.uow.register(catalog)
+        try:
+            logger.info(f"Loading products: {len(cmd.products)}")
 
-        catalog.add_products_batch(cmd.products)
-        _ = self.repo.save_batch(catalog.products)
+            catalog = ProductCatalog()
+            self.uow.register(catalog)
 
-        self.uow.commit()
+            catalog.add_products_batch(cmd.products)
+            _ = self.repo.save_batch(catalog.products)
 
-        return catalog.products
+            self.uow.commit()
 
+            logger.info(f"Products loaded successfully: {len(catalog.products)}")
+
+            return catalog.products
+
+        except Exception as e:
+            logger.error(f"Error loading products: {e}")
+            self.uow.rollback()
+            raise e

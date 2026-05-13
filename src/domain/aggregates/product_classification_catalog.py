@@ -41,12 +41,10 @@ class ProductClassification(AggregateRoot):
     def record_classification(
         self,
         business: str,
+        query: str,
         top_k: List[CategoryMatch],
     ) -> ClassificationResult:
-        """
-        Record a classification result for a specific business.
-        Emits ProductClassifiedEvent.
-        """
+
         if not top_k:
             raise Exception(
                 f"No eligible matches for product {self._product.sku} "
@@ -57,6 +55,7 @@ class ProductClassification(AggregateRoot):
             product_sku=self._product.sku,
             best=top_k[0],
             top_k=top_k,
+            query=query
         )
         self._results.append(result)
 

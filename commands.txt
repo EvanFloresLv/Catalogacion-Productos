@@ -1,0 +1,43 @@
+gcloud config get-value project 2>/dev/null
+gcloud config get-value compute/region 2>/dev/null
+
+Step 1: Create Artifact Registry repository
+gcloud artifacts repositories create product-routing --repository-format=docker --location=us-central1 --description="Product Routing API" 2>&1
+
+Step 2: Configure Docker auth for Artifact Registry
+gcloud auth configure-docker us-central1-docker.pkg.dev --quiet 2>&1
+
+Step 3: Build and push Docker image
+docker build --platform linux/amd64 -t us-central1-docker.pkg.dev/crp-pro-dig-plantillasenr/product-routing/product-routing:latest .
+docker push us-central1-docker.pkg.dev/crp-pro-dig-plantillasenr/product-routing/product-routing:latest
+
+Step 4: Deploy to Cloud Run with env vars from .env
+gcloud run deploy product-routing \
+  --image=us-central1-docker.pkg.dev/crp-dev-dig-ailab/product-routing/product-routing:latest \
+  --region=us-central1 \
+  --project=crp-dev-dig-ailab \
+  --platform=managed \
+  --port=8080 \
+  --no-allow-unauthenticated \
+  --timeout=900 \
+  --memory=1Gi \
+  --cpu=2 \
+  --set-env-vars="$(grep -v '^#' .env | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"
+
+Step 5: Redeploy
+docker build --platform linux/amd64 -t us-central1-docker.pkg.dev/crp-dev-dig-ailab/product-routing/product-routing:latest .
+docker push us-central1-docker.pkg.dev/crp-dev-dig-ailab/product-routing/product-routing:latest
+gcloud run deploy product-routing --image=us-central1-docker.pkg.dev/crp-dev-dig-ailab/product-routing/product-routing:latest --region=us-central1 --project=crp-dev-dig-ailab
+
+Step 6: Verify Deployment
+gcloud run services describe product-routing --region=us-central1 --project=crp-dev-dig-ailab
+
+Step 7: Get Service URL
+gcloud run services describe product-routing --region=us-central1 --project=crp-dev-dig-ailab --format="value(status.url)"
+
+Step 8: Test the Service
+curl -X GET $(gcloud run services describe product-routing --region=us-central1 --project=crp-dev-dig-ailab --format="value(status.url)")
+
+Step 9: Update Environment Variables
+gcloud run services update product-routing --update-env-vars="$(grep -v '^#' .env | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"
+gcloud run services update product-routing --region=us-central1 --project=crp-dev-dig-ailab --update-env-vars="LLM_LOCATION=us-central1"
