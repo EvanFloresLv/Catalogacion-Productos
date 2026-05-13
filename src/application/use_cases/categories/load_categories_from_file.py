@@ -2,6 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 import re
+import logging
 import json
 import unicodedata
 from typing import List, Dict, Any
@@ -33,6 +34,10 @@ from application.use_cases.embeddings.load_embeddings import (
     LoadEmbeddingsUseCase,
     LoadEmbeddingsCommand,
 )
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------
 # Command
 # ---------------------------------------------------------------------
@@ -91,6 +96,8 @@ class LoadCategoriesFromFileUseCase:
     def execute(self, cmd: LoadCategoriesFromFileCommand) -> Dict[str, Any]:
         try:
 
+            logger.info(f"Loading categories from file: {cmd.file_path} for business: {cmd.business}")
+
             xls = pd.ExcelFile(cmd.file_path)
             all_categories = []
 
@@ -98,6 +105,8 @@ class LoadCategoriesFromFileUseCase:
                 raise ValueError(f"Invalid business: {cmd.business}. Allowed: {self.BUSINESS}")
 
             for sheet_name in xls.sheet_names:
+                logger.info(f"Processing sheet: {sheet_name}")
+
                 sheet = pd.read_excel(xls, sheet_name=sheet_name)
                 data = self._process_data(sheet, business=cmd.business, brand=cmd.brand)
 
@@ -114,6 +123,9 @@ class LoadCategoriesFromFileUseCase:
             embeddings = self.load_embeddings_uc.execute(
                 LoadEmbeddingsCommand(categories=categories)
             )
+
+            logger.info(f"Successfully loaded categories: {len(categories)}")
+            logger.info(f"Successfully loaded embeddings: {len(embeddings)}")
 
             return {
                 "categories": categories,
@@ -159,11 +171,6 @@ class LoadCategoriesFromFileUseCase:
         ]
 
         df.drop(columns=columns_to_delete, inplace=True)
-
-        max_level = max(
-                int(col.split("_")[-1]) for col in df.columns
-                if col.startswith("level_")
-            ) if df.columns.str.startswith("level_").any() else 0
 
         last_parent: Dict[int, str] = {}
         seen: Dict[str, Category] = {}
@@ -214,7 +221,7 @@ class LoadCategoriesFromFileUseCase:
                 level=level,
 
                 parent_id=parent_id,
-                is_leaf=(level == max_level),
+                is_leaf=False,  # Will be resolved after all categories are built
 
                 description=descripcion,
                 gender=row_dict.get(gend_key, None),
@@ -234,7 +241,27 @@ class LoadCategoriesFromFileUseCase:
             # Deduplicate in O(1)
             seen[cat_id] = category
 
-        result = list(seen.values())
+        # Resolve is_leaf: a category is a leaf if no other category has it as parent
+        parent_ids = {c.parent_id for c in seen.values() if c.parent_id}
+        result = []
+        for cat in seen.values():
+            if cat.id not in parent_ids:
+                # Recreate with is_leaf=True
+                cat = Category.create(
+                    id=cat.id,
+                    name=cat.name,
+                    level=cat.level,
+                    parent_id=cat.parent_id,
+                    is_leaf=True,
+                    description=cat.description,
+                    gender=cat.gender,
+                    direction=cat.direction,
+                    brand=cat.brand,
+                    group_articles=cat.group_articles,
+                    business=cat.business,
+                    keywords=cat.keywords,
+                )
+            result.append(cat)
 
         return result
 

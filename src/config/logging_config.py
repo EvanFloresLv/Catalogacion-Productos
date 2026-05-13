@@ -37,7 +37,7 @@ def setup_logging() -> None:
             fmt="[%(asctime)s] [%(levelname)s] %(name)s — %(message)s",
             datefmt=logging_settings.date_format,
         )
-        handler = logging.StreamHandler(sys.stderr)
+        handler = logging.StreamHandler(sys.stdout)
         handler.setLevel(level)
         handler.setFormatter(fmt)
         root.addHandler(handler)
@@ -50,3 +50,5 @@ def setup_logging() -> None:
     # Quiet noisy third-party loggers
     for noisy in ("urllib3", "httpcore", "httpx", "google", "grpc"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+
+setup_logging()

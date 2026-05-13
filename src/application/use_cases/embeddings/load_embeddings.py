@@ -1,8 +1,10 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
+import logging
 from typing import List
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------
 # Internal application imports
@@ -16,6 +18,9 @@ from domain.aggregates.embedding_catalog import EmbeddingCatalog
 from shared.kernel.unit_of_work import UnitOfWork
 
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------
 # Command
 # ---------------------------------------------------------------------
@@ -28,15 +33,9 @@ class LoadEmbeddingsCommand:
 # Use Case
 # ---------------------------------------------------------------------
 class LoadEmbeddingsUseCase:
-    """
-    Generates and persists embeddings for categories.
-
-    Architecture:
-      - Uses UnitOfWork for transactional commit + event dispatch
-    """
 
     EMBEDDING_WORKERS = 4
-    BATCH_SIZE = 32
+    BATCH_SIZE = 50
 
     def __init__(
         self,
@@ -53,33 +52,52 @@ class LoadEmbeddingsUseCase:
     # =============================================================
     def execute(self, cmd: LoadEmbeddingsCommand) -> List[Embedding]:
 
-        catalog = EmbeddingCatalog()
-        self.uow.register(catalog)
+        try:
 
-        if not cmd.categories:
-            return []
+            logger.info(f"Loading embeddings for categories: {len(cmd.categories)}")
 
-        # Generate embedding texts from categories
-        embedding_texts = [
-            self._get_embedding_text(cat)
-            for cat in cmd.categories
-        ]
+            catalog = EmbeddingCatalog()
+            self.uow.register(catalog)
 
-        # Generate embeddings in parallel
-        embeddings = self._generate_embeddings_parallel(
-            cmd.categories,
-            embedding_texts,
-        )
+            if not cmd.categories:
+                return []
 
-        # Deduplicate and save
-        embeddings = self._deduplicate_embeddings(embeddings)
+            # Skip categories that already have embeddings with same hash
+            categories = self._filter_new_categories(cmd.categories)
+            logger.info(f"Categories needing embeddings: {len(categories)} (skipped {len(cmd.categories) - len(categories)} existing)")
 
-        catalog.add_embeddings_batch(embeddings)
-        saved = self.repo.save_batch(catalog.embeddings)
+            if not categories:
+                logger.info("All categories already have up-to-date embeddings")
+                return []
 
-        self.uow.commit()
+            # Generate embedding texts from categories
+            embedding_texts = [
+                self._get_embedding_text(cat)
+                for cat in categories
+            ]
 
-        return saved
+            # Generate embeddings in parallel
+            embeddings = self._generate_embeddings_parallel(
+                categories,
+                embedding_texts,
+            )
+
+            # Deduplicate and save
+            embeddings = self._deduplicate_embeddings(embeddings)
+
+            catalog.add_embeddings_batch(embeddings)
+            saved = self.repo.save_batch(catalog.embeddings)
+
+            self.uow.commit()
+
+            logger.info(f"Saved embeddings for categories: {len(saved)}")
+
+            return saved
+
+        except Exception as e:
+            logger.error(f"Error loading embeddings: {e}")
+            self.uow.rollback()
+            raise e
 
     # =============================================================
     # EMBEDDING GENERATION
@@ -93,30 +111,63 @@ class LoadEmbeddingsUseCase:
         if not categories:
             return []
 
-        vectors: List[float] = []
+        total_batches = (len(categories) + self.BATCH_SIZE - 1) // self.BATCH_SIZE
+        logger.info(
+            f"Generating embeddings: {len(categories)} categories, "
+            f"{total_batches} batches of {self.BATCH_SIZE}, "
+            f"{self.EMBEDDING_WORKERS} workers"
+        )
 
-        # Generate vectors in batches
+        # Split into batches
+        batches = []
         for i in range(0, len(categories), self.BATCH_SIZE):
+            batch_cats = categories[i:i + self.BATCH_SIZE]
             batch_texts = embedding_texts[i:i + self.BATCH_SIZE]
-            batch_vectors = self.service.generate_batch(batch_texts)
-            vectors.extend(batch_vectors)
+            batches.append((batch_cats, batch_texts))
 
-        # Create Embedding entities
-        embeddings = []
-        for category, vector in zip(categories, vectors):
-            embeddings.append(
-                Embedding.create(
-                    category_id=category.id,
-                    vector=vector,
-                    content_hash=category.semantic_hash,
+        embeddings: List[Embedding] = []
+
+        def process_batch(batch_idx, cats, texts):
+            vectors = self.service.generate_batch(texts)
+            result = []
+            for category, vector in zip(cats, vectors):
+                result.append(
+                    Embedding.create(
+                        category_id=category.id,
+                        vector=vector,
+                        content_hash=category.semantic_hash,
+                    )
                 )
-            )
+            logger.info(f"Batch {batch_idx + 1}/{total_batches} done ({len(result)} embeddings)")
+            return result
+
+        with ThreadPoolExecutor(max_workers=self.EMBEDDING_WORKERS) as executor:
+            futures = {
+                executor.submit(process_batch, idx, cats, texts): idx
+                for idx, (cats, texts) in enumerate(batches)
+            }
+            for future in as_completed(futures):
+                embeddings.extend(future.result())
 
         return embeddings
 
     # =============================================================
     # HELPERS
     # =============================================================
+    def _filter_new_categories(self, categories: List[Category]) -> List[Category]:
+        """Skip categories whose embeddings already exist with the same content hash."""
+        cat_ids = [cat.id for cat in categories]
+        existing = self.repo.get_by_category_ids(cat_ids)
+        existing_map = {e.category_id: e.content_hash for e in existing}
+
+        new_categories = []
+        for cat in categories:
+            cached_hash = existing_map.get(cat.id)
+            if cached_hash and cached_hash == cat.semantic_hash:
+                continue
+            new_categories.append(cat)
+        return new_categories
+
     @staticmethod
     def _get_embedding_text(category: Category) -> str:
         embedding_text = category.to_embedding_text()

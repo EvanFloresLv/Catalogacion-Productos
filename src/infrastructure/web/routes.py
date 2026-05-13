@@ -15,6 +15,9 @@ from infrastructure.web.controllers.products_controller import (
 from infrastructure.web.controllers.brands_controller import (
     router as brands_router,
 )
+from infrastructure.web.controllers.sql_controller import (
+    router as sql_router
+)
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -22,3 +25,4 @@ api_router.include_router(classification_router)
 api_router.include_router(categories_router)
 api_router.include_router(products_router)
 api_router.include_router(brands_router)
+api_router.include_router(sql_router)

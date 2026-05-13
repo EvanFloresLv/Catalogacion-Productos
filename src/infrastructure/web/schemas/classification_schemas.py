@@ -28,10 +28,22 @@ class CategoryMatchResponse(BaseModel):
     path: str | None = None
 
 
+class QueryConstraintsResponse(BaseModel):
+    article_group: list[str] | None = None
+    gender: str | None = None
+    direction: str | None = None
+    business: str | None = None
+    brand: str | None = None
+    is_leaf: bool | None = None
+    limit: int | None = None
+
+
 class ClassificationResultResponse(BaseModel):
     product_sku: str
+    product_name: str
     best: CategoryMatchResponse
     top_k: list[CategoryMatchResponse]
+    query: QueryConstraintsResponse | None = None
 
 
 class ClassifyProductResponse(BaseModel):

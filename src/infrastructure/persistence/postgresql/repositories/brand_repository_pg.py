@@ -73,7 +73,7 @@ class BrandRepositoryPG(BrandRepository):
         return self._to_entity(result) if result else None
 
     def get_by_business(self, business_str: str) -> List[Brand]:
-        stmt = select(BrandModel).where(BrandModel.business == business_str)
+        stmt = select(BrandModel).where(BrandModel.business.contains([business_str]))
         results = self.session.execute(stmt).scalars().all()
         return [self._to_entity(r) for r in results]
 

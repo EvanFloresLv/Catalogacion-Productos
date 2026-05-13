@@ -7,10 +7,24 @@ dependencies = [
   "fastapi",
   "uvicorn",
   "sqlalchemy",
+  "psycopg[binary]",
   "pydantic",
   "pydantic-settings",
+  "python-dotenv",
   "faiss-cpu",
-  "python-multipart"
+  "python-multipart",
+  "numpy",
+  "pandas",
+  "openpyxl",
+  "google-genai",
+  "google-cloud-aiplatform",
+  "google-auth",
+  "httpx",
+  "pyyaml",
+  "tqdm",
+  "colorlog",
+  "nltk",
+  "pgvector",
 ]
 
 [project.optional-dependencies]

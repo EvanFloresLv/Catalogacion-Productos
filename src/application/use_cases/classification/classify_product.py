@@ -26,6 +26,7 @@ from domain.aggregates.product_classification_catalog import ProductClassificati
 
 from shared.kernel.unit_of_work import UnitOfWork
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +65,7 @@ class ClassifyProductUseCase:
     # -----------------------------------------------------------------
     def execute(self, cmd: ClassifyProductCommand) -> List[ClassificationResult]:
         try:
+            logger.info(f"Classifying product with SKU: {cmd.product_sku}")
             return self._classify(cmd)
         except Exception:
             self._uow.rollback()
@@ -121,7 +123,7 @@ class ClassifyProductUseCase:
         top_k: int,
     ) -> ClassificationResult | None:
 
-        category_ids = self._fetch_allowed_category_ids(product, business)
+        category_ids, query = self._fetch_allowed_category_ids(product, business)
 
         if not category_ids:
             return None
@@ -139,47 +141,47 @@ class ClassifyProductUseCase:
         return classification.record_classification(
             business=business,
             top_k=matches,
+            query=str(query),
         )
 
     # -----------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------
-    def _fetch_allowed_category_ids(self, product: Product, business: str) -> set[str]:
+    def _fetch_allowed_category_ids(self, product: Product, business: str) -> tuple[set[str], GetCategoriesByConstraintsQuery | None]:
         brand = product.brand if "blp" in business else None
         gender = product.gender if product.gender in ("hombre", "mujer") else None
 
         # Strategy 1: Full constraints (article_group has highest priority)
         if product.article_group:
-            categories = self._query_categories(
-                article_group=list(product.article_group) if product.article_group else None,
+            ids, query = self._query_categories(
+                article_group=list(product.article_group),
                 business=business,
                 gender=gender,
                 brand=brand,
                 is_leaf=True,
             )
-
-            if categories:
-                return categories
+            if ids:
+                return ids, query
 
             # Strategy 2: Drop gender, keep article_group
-            categories = self._query_categories(
-                article_group=list(product.article_group) if product.article_group else None,
+            ids, query = self._query_categories(
+                article_group=list(product.article_group),
                 business=business,
                 brand=brand,
                 is_leaf=True,
             )
-            if categories:
-                return categories
+            if ids:
+                return ids, query
 
         # Strategy 3: Drop article_group, use gender
-        categories = self._query_categories(
+        ids, query = self._query_categories(
             business=business,
             gender=gender,
             brand=brand,
             is_leaf=True,
         )
-        if categories:
-            return categories
+        if ids:
+            return ids, query
 
         # Strategy 4: Broadest — just business + is_leaf
         return self._query_categories(
@@ -188,10 +190,11 @@ class ClassifyProductUseCase:
             is_leaf=True,
         )
 
-    def _query_categories(self, **kwargs) -> set[str]:
+    def _query_categories(self, **kwargs) -> tuple[set[str], GetCategoriesByConstraintsQuery]:
         query = GetCategoriesByConstraintsQuery(**kwargs)
         categories = self._category_query_service.get_categories_by_constraints(query)
-        return {c.id for c in categories} if categories else set()
+        ids = {c.id for c in categories} if categories else set()
+        return ids, query
 
     def _build_category_matches(
         self, raw_results: list,
