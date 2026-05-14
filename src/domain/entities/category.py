@@ -39,7 +39,7 @@ class Category:
     gender: str | None = None
     direction: str | None = None
     brand: str | None = None
-    group_articles: list[int] | None = None
+    article_group: list[int] | None = None
 
     business: str = ""
     semantic_hash: str = ""

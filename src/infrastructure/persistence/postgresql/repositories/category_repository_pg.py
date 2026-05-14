@@ -183,7 +183,7 @@ class CategoryRepositoryPG(CategoryRepository):
                 value = list(value or [])
 
             # Convert list -> list for Postgres JSONB
-            if field.name == "group_articles":
+            if field.name == "article_group":
                 value = list(value) if value else None
 
             row[field.name] = value

@@ -18,3 +18,4 @@ class ClassificationResult:
     product_sku: str
     best: CategoryMatch
     top_k: list[CategoryMatch]
+    query: str

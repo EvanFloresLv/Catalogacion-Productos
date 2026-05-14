@@ -65,16 +65,27 @@ def _to_query_response(query_str: str | None) -> QueryConstraintsResponse | None
     )
 
 
-def _to_result_response(result, product_name: str = "") -> ClassificationResultResponse | None:
+def _to_result_response(result, product_name: str = "") -> dict | None:
     if result is None:
         return None
-    return ClassificationResultResponse(
-        product_sku=result.product_sku,
-        product_name=product_name,
-        best=_to_match_response(result.best),
-        top_k=[_to_match_response(m) for m in result.top_k],
-        query=_to_query_response(result.query),
-    )
+    return {
+        "product_sku": result.product_sku,
+        "product_name": product_name,
+        "best": {
+            "category_id": result.best.category_id,
+            "score": result.best.score,
+            "path": result.best.path,
+        },
+        "top_k": [
+            {
+                "category_id": m.category_id,
+                "score": m.score,
+                "path": m.path,
+            }
+            for m in result.top_k
+        ],
+        "query": _to_query_response(result.query),
+    }
 
 
 # -----------------------------------------------------------------

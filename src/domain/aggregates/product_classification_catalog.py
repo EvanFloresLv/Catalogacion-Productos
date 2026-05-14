@@ -41,6 +41,7 @@ class ProductClassification(AggregateRoot):
     def record_classification(
         self,
         business: str,
+        query: str,
         top_k: List[CategoryMatch],
     ) -> ClassificationResult:
         """
@@ -57,6 +58,7 @@ class ProductClassification(AggregateRoot):
             product_sku=self._product.sku,
             best=top_k[0],
             top_k=top_k,
+            query=query
         )
         self._results.append(result)
 

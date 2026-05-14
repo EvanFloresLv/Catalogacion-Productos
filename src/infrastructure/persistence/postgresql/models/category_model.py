@@ -34,7 +34,7 @@ class CategoryModel(Base):
     gender: Mapped[str | None] = mapped_column(String(50), nullable=True)
     direction: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_leaf: Mapped[bool | None] = mapped_column(nullable=True)
-    group_articles: Mapped[list[str]] = mapped_column(JSONB, nullable=True, default=list)
+    article_group: Mapped[list[str]] = mapped_column(JSONB, nullable=True, default=list)
 
     brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     business: Mapped[str | None] = mapped_column(String(100), nullable=True)

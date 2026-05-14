@@ -227,7 +227,7 @@ class LoadCategoriesFromFileUseCase:
                 gender=row_dict.get(gend_key, None),
                 direction=None,
                 brand=brand,
-                group_articles=group_articles,
+                article_group=group_articles,
                 business=business,
 
                 keywords=self._extract_keywords(
@@ -257,7 +257,7 @@ class LoadCategoriesFromFileUseCase:
                     gender=cat.gender,
                     direction=cat.direction,
                     brand=cat.brand,
-                    group_articles=cat.group_articles,
+                    article_group=cat.article_group,
                     business=cat.business,
                     keywords=cat.keywords,
                 )

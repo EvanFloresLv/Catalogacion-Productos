@@ -92,7 +92,7 @@ class DomainFactory:
             direction=direction,
             brand=brand,
             is_leaf=is_leaf,
-            group_articles=group_articles,
+            article_group=group_articles,
         )
 
     # ── Product ──────────────────────────────────────────────────

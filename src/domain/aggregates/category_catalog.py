@@ -95,7 +95,7 @@ class CategoryCatalog(AggregateRoot):
                     direction=cat.direction,
                     brand=cat.brand,
                     is_leaf=cat.is_leaf,
-                    group_articles=cat.group_articles,
+                    article_group=cat.article_group,
                     business=cat.business,
                 )
 
