@@ -1,10 +1,7 @@
 # Entities
 from .entities.category import Category
-
 from .entities.result import ClassificationResult, CategoryMatch
-
 from .entities.product import Product
-
 from .entities.embedding import Embedding
 
 # Aggregates

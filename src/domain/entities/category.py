@@ -3,43 +3,18 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields, replace, asdict
-from typing import Tuple, Iterable, Any
-import re
-import unicodedata
+from dataclasses import dataclass, field, replace, asdict
+from typing import Tuple, Any
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
 from .errors import CategoryNameError
+from .brand import Brand
+
 from domain.value_objects.semantic_hash import SemanticHash
+from utils.domain_validatons import validate_entity_fields, normalize_str
 
-
-# -------------------------------------------------------------
-# Helpers
-# -------------------------------------------------------------
-def _normalize_text(value: str | None) -> str:
-    if value is None:
-        return value
-
-    value = unicodedata.normalize("NFKD", str(value))
-    value = re.sub(r"\s+", " ", value)
-    value = value.strip()
-
-    return value or None
-
-
-def _normalize_keywords(values: Iterable[str] | None) -> Tuple[str, ...]:
-    if not values:
-        return ()  # Return empty tuple instead of None
-
-    normalized = {
-        _normalize_text(v).lower()
-        for v in values
-        if isinstance(v, str) and v.strip()
-    }
-
-    return tuple(sorted(normalized)) if normalized else ()
 
 # -------------------------------------------------------------
 # Entity
@@ -53,73 +28,54 @@ class Category:
     id: str
     name: str
     level: int
-    semantic_hash: str
 
     # ---------------------------------------------------------
     # Optional fields
     # ---------------------------------------------------------
     parent_id: str | None = None
+    is_leaf: bool | None = None
+
     description: str | None = None
-    url: str | None = None
+    gender: str | None = None
+    direction: str | None = None
+    brand: str | None = None
+    group_articles: list[int] | None = None
+
+    business: str = ""
+    semantic_hash: str = ""
 
     # ---------------------------------------------------------
     # Structured fields
     # ---------------------------------------------------------
-    keywords_json: Tuple[str, ...] = field(default_factory=tuple)
+    keywords: Tuple[str, ...] = field(default_factory=tuple)
 
     # ---------------------------------------------------------
     # Factory
     # ---------------------------------------------------------
     @classmethod
-    def create(cls, **data: Any) -> Category:
-        """
-        Flexible factory:
-        - Auto-maps dataclass fields
-        - Rejects unknown fields
-        - Normalizes consistently
-        - Computes semantic_hash internally
-        """
+    def create(cls, **data: Any) -> "Category":
 
-        field_names = {f.name for f in fields(cls)}
-        allowed_input_fields = field_names - {"semantic_hash"}
-
-        # -----------------------------
-        # Guard against unknown fields
-        # -----------------------------
-        unknown = set(data.keys()) - allowed_input_fields
-        if unknown:
-            raise CategoryNameError(
-                f"Unknown fields for Category: {unknown}"
+        try:
+            validated = validate_entity_fields(
+                cls,
+                data,
+                required_fields={"id", "name", "level"},
+                to_remove={"semantic_hash"},
             )
 
-        normalized: dict[str, Any] = {}
+            cls._validate(validated)
 
-        for field_name in allowed_input_fields:
-            value = data.get(field_name)
+            semantic_hash = SemanticHash.from_text(
+                cls._build_embedding_text(
+                    name=validated["name"],
+                    description=validated.get("description", ""),
+                    keywords=validated.get("keywords", ()),
+                )
+            ).value
 
-            if field_name == "keywords_json":
-                normalized[field_name] = _normalize_keywords(value)
-            elif field_name == "id":
-                match = re.search(r"cat.+", str(value))
-                normalized[field_name] = match.group() if match else str(value)
-            elif isinstance(value, str) or value is None:
-                normalized[field_name] = _normalize_text(value)
-            else:
-                normalized[field_name] = value
-
-        normalized["semantic_hash"] = SemanticHash.from_text(
-            cls._build_embedding_text(
-                name=normalized["name"],
-                description=normalized.get("description", ""),
-                keywords=normalized.get("keywords_json", ()),
-            )
-        ).value
-
-        # -----------------------------
-        # Validation
-        # -----------------------------
-        cls._validate(normalized)
-        return cls(**normalized)
+            return cls(**validated, semantic_hash=semantic_hash)
+        except Exception as e:
+            return None
 
     # ---------------------------------------------------------
     # Validation
@@ -171,13 +127,31 @@ class Category:
         return self._build_embedding_text(
             self.name,
             self.description or "",
-            self.keywords_json or (),
+            self.keywords or (),
         )
 
 
     def with_id(self, new_id: str) -> Category:
-        return replace(self, id=_normalize_text(new_id))
+        return replace(self, id=normalize_str(new_id))
 
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+if __name__ == "__main__":
+
+    category = Category.create(
+        id="1",
+        name="Electronics",
+        level=1,
+        parent_id=None,
+        description="All electronic items",
+        keywords=("electronics", "gadgets"),
+        gender="unisex",
+        direction="kids",
+        brand=None,
+        is_leaf=False
+    )
+
+    print(category)

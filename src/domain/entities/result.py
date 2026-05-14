@@ -5,14 +5,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# ---------------------------------------------------------------------
-# Third-party libraries
-# ---------------------------------------------------------------------
-
-# ---------------------------------------------------------------------
-# Internal application imports
-# ---------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class CategoryMatch:
@@ -26,4 +18,3 @@ class ClassificationResult:
     product_sku: str
     best: CategoryMatch
     top_k: list[CategoryMatch]
-    query: str

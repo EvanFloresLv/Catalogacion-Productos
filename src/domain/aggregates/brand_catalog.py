@@ -6,7 +6,6 @@ from domain.entities.brand import Brand
 from domain.events.brand_events import (
     BrandCreatedEvent,
     BrandUpdatedEvent,
-    BrandDeletedEvent
 )
 
 
