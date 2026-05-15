@@ -25,6 +25,10 @@ dependencies = [
   "colorlog",
   "nltk",
   "pgvector",
+  "llm-sdk-core",
+  "llm-sdk-provider-gemini",
+  "evan-logger",
+  "jinja2"
 ]
 
 [project.optional-dependencies]

@@ -94,7 +94,7 @@ def test_load_products():
     with SessionLocal() as session:
         product_repo = ProductRepositoryPG(session)
 
-        cmd = LoadProductsFromFileCommand(file_path="./data/Products.xlsx")
+        cmd = LoadProductsFromFileCommand(file_path="./ProductsAdded.xlsx")
         uow = create_unit_of_work(session)
         use_case = LoadProductsFromFileUseCase(repo=product_repo, uow=uow)
         result = use_case.execute(cmd)
@@ -164,10 +164,102 @@ def test_classification_batch_products():
                 print(f"  - {sku}: {err}")
 
 
+def test_llm():
+    import json
+    import pandas
+
+    from utils.prompt import Prompt
+
+    from llm_sdk.sync_sdk import LLM
+    from llm_sdk.providers.sync_registry import ProviderSpec
+    from llm_sdk_provider_gemini import SyncGeminiClient
+    from llm_sdk.domain.chat import ChatMessage, ChatPart
+
+    path = "./src/prompts/add_attributes.yml"
+    prompt = Prompt(path)
+
+    products_path = "./data/Products.xlsx"
+    df = pandas.read_excel(products_path)
+    prompt_data = []
+
+    for _, row in df.iterrows():
+        prompt_data.append({
+            "codigo_sku": row["Código SKU"],
+            "nombre_producto": row["Nombre del Producto"],
+            "negocio": row["Negocio"],
+            "direccion": row["Dirección"],
+            "seccion": row["Sección"],
+            "marca": row["Marca"]
+        })
+
+    # Initialize SDK once
+    sdk = LLM.default()
+    sdk.registry.register(ProviderSpec(
+        name="gemini",
+        factory=lambda: SyncGeminiClient(
+            location=sdk.settings.gemini.location,
+        ),
+        models={
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+        },
+    ))
+
+    BATCH_SIZE = max(1, len(prompt_data) // 5)
+    all_results = []
+
+    for i in range(0, len(prompt_data), BATCH_SIZE):
+        batch = prompt_data[i:i + BATCH_SIZE]
+        batch_num = i // BATCH_SIZE + 1
+        print(f"\n--- Batch {batch_num} ({len(batch)} products) ---")
+
+        data = prompt.get_prompt(
+            input_data=str(batch)
+        )
+
+        system = str(data.get("system")).replace("\n", "")
+        user = str(data.get("user")).replace("\n", "")
+
+        resp = sdk.chat(
+            messages=[
+                ChatMessage(
+                    role="model",
+                    parts=[
+                        ChatPart(
+                            type="text",
+                            text=system
+                        ),
+                    ]
+                ),
+                ChatMessage(
+                    role="user",
+                    parts=[
+                        ChatPart(
+                            type="text",
+                            text=user
+                        ),
+                    ]
+                )
+            ],
+            output_schema=data.get("schema"),
+            provider="gemini",
+            model="gemini-2.5-flash",
+        )
+
+        result = json.loads(resp.content)
+        all_results.extend(result if isinstance(result, list) else [result])
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    print(f"\n✅ Total results: {len(all_results)}")
+
+    with open("./classification_results.json", "w", encoding="utf-8") as f:
+        json.dump(all_results, f, indent=2, ensure_ascii=False)
+
 if __name__ == "__main__":
     # test_load_file()
-    # test_load_products()
+    test_load_products()
     # test_load_brands()
     # test_classification_product()
-    test_classification_batch_products()
+    # test_classification_batch_products()
     # setup_logging()
+    # test_llm()
