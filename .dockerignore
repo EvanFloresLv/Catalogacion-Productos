@@ -1,0 +1,16 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.git/
+.env
+data/
+tests/
+*.xlsx
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+node_modules/
+my_dump.sql
+classification_results.json
+db.ipynb

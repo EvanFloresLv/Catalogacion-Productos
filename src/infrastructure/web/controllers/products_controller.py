@@ -38,7 +38,7 @@ def load_products_from_file(
         tmp_path = tmp.name
 
     use_case = get_load_products_use_case(session)
-    cmd = LoadProductsFromFileCommand(file_path=tmp_path)
+    cmd = LoadProductsFromFileCommand(file_path=tmp_path, enhance=True)
     result = use_case.execute(cmd)
 
     return LoadProductsResponse(

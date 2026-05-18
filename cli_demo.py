@@ -94,7 +94,10 @@ def test_load_products():
     with SessionLocal() as session:
         product_repo = ProductRepositoryPG(session)
 
-        cmd = LoadProductsFromFileCommand(file_path="./data/ProductsWithTypeTest.xlsx")
+        cmd = LoadProductsFromFileCommand(
+            file_path="./data/ProductsWithTypeTest.xlsx",
+            enhance=True,  # Set to True if you want to test LLM enhancement (requires prompt setup and API access)
+        )
         uow = create_unit_of_work(session)
         use_case = LoadProductsFromFileUseCase(repo=product_repo, uow=uow)
         result = use_case.execute(cmd)
@@ -257,9 +260,9 @@ def test_llm():
 
 if __name__ == "__main__":
     # test_load_file()
-    # test_load_products()
+    test_load_products()
     # test_load_brands()
-    test_classification_product()
+    # test_classification_product()
     # test_classification_batch_products()
     # setup_logging()
     # test_llm()

@@ -77,6 +77,7 @@ class ClassifyProductUseCase:
     # -----------------------------------------------------------------
     def _classify(self, cmd: ClassifyProductCommand) -> List[ClassificationResult]:
         product = self._products.get_by_sku(cmd.product_sku)
+
         if not product:
             raise ValueError(f"Product with SKU {cmd.product_sku} not found.")
 
@@ -135,6 +136,7 @@ class ClassifyProductUseCase:
         category_ids, query = self._fetch_allowed_category_ids(product, business)
 
         if not category_ids:
+            logger.warning(f"No allowed categories found for product SKU {product.sku} in business {business} with query {query}")
             return None
 
         raw_results = self._embeddings.search_similar(
@@ -142,7 +144,9 @@ class ClassifyProductUseCase:
             category_ids=list(category_ids),
             limit=top_k,
         )
+
         if not raw_results:
+            logger.warning(f"No similar embeddings found for product SKU {product.sku} in business {business}")
             return None
 
         matches = self._build_category_matches(raw_results[:top_k])

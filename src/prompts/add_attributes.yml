@@ -73,8 +73,10 @@ prompt:
     Las keywords deben:
     - Representar intención de búsqueda real.
     - Describir categoría, uso, público o contexto.
-    - Complementar el short_title.
+    - Complementar short_title.
+    - Contener atributos generales pero relevantes.
     - Ser específicas pero reutilizables.
+    - Ser únicas.
     - Estar normalizadas en minúsculas.
 
     Considera información de:
@@ -82,14 +84,6 @@ prompt:
     - Negocio
     - Dirección
     - Sección
-    - Marca
-
-    Evita:
-    - Keywords duplicadas
-    - Stopwords innecesarias
-    - Valores genéricos sin valor semántico
-    - Códigos internos
-    - Repetir exactamente el short_title
 
     ========================
     REGLAS GENERALES
@@ -114,7 +108,6 @@ prompt:
     - Negocio
     - Dirección
     - Sección
-    - Marca
 
     ========================
     FORMATO DE SALIDA

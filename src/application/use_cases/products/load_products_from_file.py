@@ -20,6 +20,10 @@ from application.use_cases.products.load_products import (
     LoadProductsCommand,
     LoadProductsUseCase,
 )
+from application.use_cases.products.enhance_products import (
+    EnhanceProductsCommand,
+    EnhanceProductsUseCase,
+)
 from domain.entities.product import Product
 from domain.repositories.product_repository import ProductRepository
 from shared.kernel.unit_of_work import UnitOfWork
@@ -40,6 +44,7 @@ nltk.download("stopwords")
 @dataclass
 class LoadProductsFromFileCommand:
     file_path: str
+    enhance: bool = False
 
 
 # ---------------------------------------------------------------------
@@ -71,9 +76,11 @@ class LoadProductsFromFileUseCase:
         self,
         repo: ProductRepository,
         uow: UnitOfWork,
+        enhance_uc: EnhanceProductsUseCase | None = None,
     ):
         self.repo = repo
         self.uow = uow
+        self._enhance_uc = enhance_uc or EnhanceProductsUseCase()
 
         self.load_products_uc = LoadProductsUseCase(
             repo=self.repo,
@@ -88,11 +95,22 @@ class LoadProductsFromFileUseCase:
         try:
             logger.info(f"Loading products from file: {cmd.file_path}")
 
-            data = pd.read_excel(
-                cmd.file_path,
-                sheet_name=0,
-                engine="openpyxl",
-            )
+            # ---------------------------------------------------------
+            # Step 0: Enhance products with LLM (if prompt provided)
+            # ---------------------------------------------------------
+            if cmd.enhance:
+                logger.info("Enhancing products with LLM before processing...")
+                enhance_cmd = EnhanceProductsCommand(
+                    data_file=cmd.file_path,
+                )
+                data = self._enhance_uc.execute(enhance_cmd)
+                logger.info(f"Enhancement complete. Rows: {len(data)}")
+            else:
+                data = pd.read_excel(
+                    cmd.file_path,
+                    sheet_name=0,
+                    engine="openpyxl",
+                )
 
             column_map = self.map_columns(data, self.TARGETS)
             merged = self.merge_columns(data, column_map)
