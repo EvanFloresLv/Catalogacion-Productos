@@ -234,7 +234,16 @@ class ClassifyBatchProductsUseCase:
         if brand is None:
             return product_businesses
 
-        return product_businesses & set(brand.business)
+        # Normalize brand business names to canonical format
+        # DB may store "blp_liverpool" but we use "liverpool-blp"
+        normalized_brand_businesses = set()
+        for b in brand.business:
+            if b.startswith("blp_"):
+                normalized_brand_businesses.add(f"{b[4:]}-blp")
+            else:
+                normalized_brand_businesses.add(b)
+
+        return product_businesses & normalized_brand_businesses
 
     # -----------------------------------------------------------------
     # Single-business classification

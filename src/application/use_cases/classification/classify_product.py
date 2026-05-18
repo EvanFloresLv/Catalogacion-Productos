@@ -109,7 +109,16 @@ class ClassifyProductUseCase:
         if not brand:
             return product_businesses
 
-        return product_businesses & set(brand.business)
+        # Normalize brand business names to canonical format
+        # DB may store "blp_liverpool" but we use "liverpool-blp"
+        normalized_brand_businesses = set()
+        for b in brand.business:
+            if b.startswith("blp_"):
+                normalized_brand_businesses.add(f"{b[4:]}-blp")
+            else:
+                normalized_brand_businesses.add(b)
+
+        return product_businesses & normalized_brand_businesses
 
     # -----------------------------------------------------------------
     # Single-business classification
@@ -149,7 +158,8 @@ class ClassifyProductUseCase:
     # -----------------------------------------------------------------
     def _fetch_allowed_category_ids(self, product: Product, business: str) -> tuple[set[str], GetCategoriesByConstraintsQuery | None]:
         brand = product.brand if "blp" in business else None
-        gender = product.gender if product.gender in ("hombre", "mujer") else None
+        # gender = product.gender if product.gender in ("hombre", "mujer") else None
+        gender = None
 
         # Strategy 1: Full constraints (article_group has highest priority)
         if product.article_group:

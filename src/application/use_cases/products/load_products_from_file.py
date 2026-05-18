@@ -57,8 +57,9 @@ class LoadProductsFromFileUseCase:
         "Marca",
         "Género",
         "Disciplina",
-        "título corto",
-        "keywords",
+        "Título corto",
+        "Keywords",
+        "ProductTypeSAP",
     ]
 
     STOPWORDS = set(stopwords.words("spanish"))
@@ -98,7 +99,7 @@ class LoadProductsFromFileUseCase:
 
             self.apply_numeric_extraction(
                 merged,
-                ["Grupo", "Sección", "Dirección"],
+                ["grupo", "sección", "dirección"],
             )
 
             merged = self.clean_dataframe(merged)
@@ -109,7 +110,6 @@ class LoadProductsFromFileUseCase:
                 try:
                     product = self.create_from_dataframe_row(row)
                     all_products.append(product)
-
                 except Exception as e:
                     logger.error(
                         f"Error creating product from row {index}: {e}"
@@ -186,6 +186,9 @@ class LoadProductsFromFileUseCase:
                     axis=1,
                 )
 
+        # Rename columns to lowercased target names for consistency
+        merged.columns = [str(col).strip().lower() for col in merged.columns]
+
         return merged
 
     def merge_row_values(
@@ -247,8 +250,8 @@ class LoadProductsFromFileUseCase:
             for w in kw_value:
                 keywords.update(self.normalize(str(w)))
 
-        # Add tokens from name columns
-        for col in ["título corto", "disciplina", "género"]:
+        # Add tokens from name and type columns
+        for col in ["título corto", "nombre", "disciplina", "género", "producttypesap"]:
             value = row.get(col)
             if value and isinstance(value, str):
                 keywords.update(self.normalize(value))
@@ -275,11 +278,6 @@ class LoadProductsFromFileUseCase:
         self,
         df: pd.DataFrame,
     ) -> pd.DataFrame:
-
-        df.columns = [
-            str(col).strip().lower()
-            for col in df.columns
-        ]
 
         required = [
             "código sku",
@@ -356,12 +354,17 @@ class LoadProductsFromFileUseCase:
         if isinstance(article_group, set):
             article_group = sorted(article_group)
 
+        # SKU: convert float (e.g. 4.016589e+06) to int string
+        sku_raw = row.get("código sku")
+        sku = str(int(float(sku_raw))) if pd.notna(sku_raw) else ""
+
         return Product.create(
-            sku=str(row.get("código sku")),
+            sku=sku,
             name=str(name) if name else "",
             brand=str(row.get("marca")),
             direction=str(row.get("dirección")),
             product_type=str(row.get("negocio")),
+            category=str(row.get("producttypesap")),
             description=str(row.get("disciplina") or ""),
             gender=row.get("género"),
             article_group=article_group,

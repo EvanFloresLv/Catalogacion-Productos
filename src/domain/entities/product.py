@@ -23,10 +23,10 @@ VALID_PRODUCT_TYPES: dict[str, Tuple[str, ...]] = {
     "marketplace": ("liverpool", "suburbia", "liverpool-blp", "suburbia-blp"),
     "marcas propias": ("liverpool", "liverpool-blp"),
     "sfera": ("liverpool", "suburbia"),
-    "regular": ("liverpool",),
-    "suburbia": ("suburbia",),
-    "catmex": ("suburbia",),
-    "internet": ("liverpool",),
+    "regular": ("liverpool", "liverpool-blp"),
+    "suburbia": ("suburbia", "suburbia-blp"),
+    "catmex": ("suburbia", "suburbia-blp"),
+    "internet": ("liverpool", "liverpool-blp"),
 }
 
 # -------------------------------------------------------------
@@ -55,6 +55,7 @@ class Product:
 
     # Optional
     keywords: Tuple[str, ...] = field(default_factory=tuple)
+    category: str | None = None
     gender: str | None = None
     article_group: set[str] | None = None
     description: str | None = None

@@ -15,10 +15,12 @@ class ProductResponse(BaseModel):
     brand: str
     direction: str
     product_type: str
+    category: str | None = None
     business: list[str]
     gender: str | None = None
     description: str | None = None
     keywords: list[str] = []
+    article_group: list | None = None
 
 
 class LoadProductsResponse(BaseModel):

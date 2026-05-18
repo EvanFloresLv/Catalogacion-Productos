@@ -64,8 +64,10 @@ def get_product_by_sku(
         brand=product.brand,
         direction=product.direction,
         product_type=product.product_type,
+        category=product.category,
         business=list(product.business),
         gender=product.gender,
         description=product.description,
         keywords=list(product.keywords) if product.keywords else [],
+        article_group=list(product.article_group) if product.article_group else None,
     )

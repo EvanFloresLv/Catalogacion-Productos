@@ -23,6 +23,7 @@ class ProductModel(Base):
     brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     direction: Mapped[str | None] = mapped_column(String(255), nullable=True)
     product_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     business: Mapped[list[str]] = mapped_column(ARRAY(String(50)), nullable=False)
 
