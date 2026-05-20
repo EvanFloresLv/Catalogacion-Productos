@@ -104,6 +104,13 @@ class LoadProductsFromFileUseCase:
                     data_file=cmd.file_path,
                 )
                 data = self._enhance_uc.execute(enhance_cmd)
+
+                # Rename LLM output columns to match pipeline expectations
+                data.rename(columns={
+                    "short_title": "Título corto",
+                    "keywords": "Keywords",
+                }, inplace=True, errors="ignore")
+
                 logger.info(f"Enhancement complete. Rows: {len(data)}")
             else:
                 data = pd.read_excel(
@@ -212,11 +219,25 @@ class LoadProductsFromFileUseCase:
     def merge_row_values(
         self,
         row: pd.Series,
-    ) -> set[Any] | None:
+    ) -> Any | None:
 
         values = row.dropna().tolist()
 
-        return set(values) if values else None
+        if not values:
+            return None
+
+        flat = []
+        for v in values:
+            if isinstance(v, list):
+                flat.extend(v)
+            else:
+                flat.append(v)
+
+        try:
+            return set(flat) if flat else None
+        except TypeError:
+            # If still unhashable, return the first value
+            return flat[0] if len(flat) == 1 else flat
 
     # -----------------------------------------------------------------
     # Extraction

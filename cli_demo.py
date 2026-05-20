@@ -74,7 +74,7 @@ def test_load_file():
         embedding_repo = EmbeddingRepositoryPG(session)
         embedding_service = EmbeddingClient()
 
-        cmd = LoadCategoriesFromFileCommand(file_path="./data/Suburbia.xlsx", business="suburbia")
+        cmd = LoadCategoriesFromFileCommand(file_path="./data/Liverpool.xlsx", business="liverpool")
         uow = create_unit_of_work(session)
         use_case = LoadCategoriesFromFileUseCase(
             category_repository=category_repo,
@@ -95,7 +95,7 @@ def test_load_products():
         product_repo = ProductRepositoryPG(session)
 
         cmd = LoadProductsFromFileCommand(
-            file_path="./data/ProductsWithTypeTest.xlsx",
+            file_path="./data/FilasFaltantes.xlsx",
             enhance=True,  # Set to True if you want to test LLM enhancement (requires prompt setup and API access)
         )
         uow = create_unit_of_work(session)
@@ -110,7 +110,7 @@ def test_classification_product():
     with SessionLocal() as session:
         product_repo = ProductRepositoryPG(session)
 
-        cmd = ClassifyProductCommand(product_sku="5013081990", top_k=5)
+        cmd = ClassifyProductCommand(product_sku="5014048091", top_k=5)
 
         category_repo = CategoryRepositoryPG(session)
         category_query_service = CategoryQueryService(categories=category_repo)
@@ -260,9 +260,9 @@ def test_llm():
 
 if __name__ == "__main__":
     # test_load_file()
-    test_load_products()
+    # test_load_products()
     # test_load_brands()
-    # test_classification_product()
+    test_classification_product()
     # test_classification_batch_products()
     # setup_logging()
     # test_llm()

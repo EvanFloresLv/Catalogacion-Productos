@@ -31,6 +31,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 @router.post("/load", response_model=LoadProductsResponse)
 def load_products_from_file(
     file: UploadFile = File(...),
+    enhance: bool = True,
     session: Session = Depends(get_session),
 ):
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
@@ -38,7 +39,7 @@ def load_products_from_file(
         tmp_path = tmp.name
 
     use_case = get_load_products_use_case(session)
-    cmd = LoadProductsFromFileCommand(file_path=tmp_path, enhance=True)
+    cmd = LoadProductsFromFileCommand(file_path=tmp_path, enhance=enhance)
     result = use_case.execute(cmd)
 
     return LoadProductsResponse(
