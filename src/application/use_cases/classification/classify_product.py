@@ -87,6 +87,15 @@ class ClassifyProductUseCase:
         query_vector = self._embedding_service.generate(product.to_embedding_text())
         businesses = self._resolve_businesses(product)
 
+        if not businesses:
+            logger.warning(
+                f"No eligible businesses for product {product.sku} "
+                f"(brand={product.brand}, product_type={product.product_type}, "
+                f"business={product.business})"
+            )
+            # Fallback: use all product businesses without brand filtering
+            businesses = set(product.business)
+
         results = {
             business: self._classify_for_business(
                 classification, product, query_vector, business, cmd.top_k,
@@ -94,8 +103,11 @@ class ClassifyProductUseCase:
             for business in businesses
         }
 
-        if not results:
-            raise ValueError(f"No eligible matches found for product {product.sku}")
+        if not any(results.values()):
+            raise ValueError(
+                f"No eligible matches found for product {product.sku} "
+                f"(tried businesses: {businesses})"
+            )
 
         self._uow.commit()
         return results
