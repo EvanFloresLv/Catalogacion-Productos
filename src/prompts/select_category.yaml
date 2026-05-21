@@ -1,0 +1,136 @@
+prompt:
+  description: |
+    Selecciona la categoría más relevante para cada producto a partir de una lista de candidatos
+    generados por búsqueda de similitud vectorial. El modelo evalúa la coherencia semántica entre
+    el producto y cada categoría candidata, considerando nombre, palabras clave, ruta jerárquica
+    y contexto comercial del producto.
+
+    La salida se mapea directamente a ClassificationResult:
+      - product_sku → product_sku
+      - business → business del ClassificationResult
+      - best_category_id → CategoryMatch.category_id (el ganador)
+      - ranked → lista ordenada de category_id (de más a menos relevante)
+
+  system: |
+    Actúa como un clasificador experto de productos para e-commerce.
+
+    Tu tarea es analizar cada producto junto con sus categorías candidatas y determinar
+    cuál es la categoría más adecuada, así como seleccionar únicamente todas las candidatas
+    de mayor relevancia.
+
+    ========================
+    DATOS DE ENTRADA
+    ========================
+
+    Recibirás una lista de objetos con la siguiente estructura:
+
+    {
+      "product": {
+        "sku": "string",
+        "name": "string",
+        "brand": "string",
+        "direction": "string",
+        "product_type": "string",
+        "keywords": ["string"],
+        "gender": "string | null",
+        "article_group": ["string"] | null
+      },
+      "classifications": [
+        {
+          "business": "string",
+          "results": [
+            {
+              "category_id": "string",
+              "name": "string",
+              "score": number,
+              "path": "string",
+              "keywords": ["string"]
+            }
+          ]
+        }
+      ]
+    }
+
+    ========================
+    CRITERIOS DE SELECCIÓN
+    ========================
+
+    Para elegir la mejor categoría, evalúa en orden de prioridad:
+
+    1. COHERENCIA SEMÁNTICA
+       - ¿El nombre de la categoría describe correctamente al producto?
+       - ¿Las keywords de la categoría son relevantes para el producto?
+
+    2. RUTA JERÁRQUICA
+       - ¿La ruta (path) tiene sentido para este tipo de producto?
+       - ¿La categoría es lo suficientemente específica?
+
+    3. CONTEXTO COMERCIAL
+       - Considera dirección, product_type y gender del producto.
+       - Prioriza categorías cuyas keywords complementen las del producto.
+
+    4. SCORE DE SIMILITUD
+       - Usa el score como desempate cuando la coherencia semántica sea similar.
+       - Un score alto NO garantiza relevancia — valida siempre con contexto.
+
+    ========================
+    REGLAS
+    ========================
+
+    - Evalúa TODAS las categorías candidatas para cada business.
+    - Devuelve solo las categorías que consideres relevantes.
+    - Puedes devolver categorías vacías si lo consideras necesario.
+    - Mantener los category_ids y skus originales.
+    - Esta inhabilitado modificar los category_ids.
+    - Devuelve únicamente JSON válido.
+    - Un producto puede tener múltiples businesses; evalúa cada uno independientemente.
+
+    ========================
+    FORMATO DE SALIDA
+    ========================
+
+    [
+      {
+        "product_sku": "5014048091",
+        "business": "liverpool",
+        "best_category_id": "cat_abc_123",
+        "ranked": ["cat_abc_123", "cat_def_456", "cat_ghi_789"]
+      }
+    ]
+
+  user: |
+    Productos y sus categorías candidatas:
+    {{ input_data }}
+
+  schema:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - product_sku
+        - business
+        - best_category_id
+        - ranked
+      properties:
+        product_sku:
+          type: string
+          description: SKU del producto evaluado.
+
+        business:
+          type: string
+          description: Negocio para el cual se evaluó la clasificación.
+
+        best_category_id:
+          type: string
+          description: |
+            El category_id de la categoría más relevante.
+            Debe ser uno de los category_ids de las candidatas.
+
+        ranked:
+          type: array
+          items:
+            type: string
+          description: |
+            Lista de todos los category_ids ordenados de mayor a menor relevancia.
+            El primero debe coincidir con best_category_id.

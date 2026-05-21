@@ -2,7 +2,7 @@ gcloud config get-value project 2>/dev/null
 gcloud config get-value compute/region 2>/dev/null
 
 Step 1: Create Artifact Registry repository
-gcloud artifacts repositories create product-routing --repository-format=docker --location=us-central1 --description="Product Routing API" 2>&1
+gcloud artifacts repositories create product-routing --repository-format=docker --location=us-central1 --project=crp-pro-dig-plantillasenr --description="Product Routing API" 2>&1
 
 Step 2: Configure Docker auth for Artifact Registry
 gcloud auth configure-docker us-central1-docker.pkg.dev --quiet 2>&1
@@ -24,6 +24,13 @@ gcloud run deploy product-routing \
   --cpu=2 \
   --set-env-vars="$(grep -v '^#' .env | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"
 
+Step 4.1 Grant access
+gcloud run services add-iam-policy-binding product-routing-dev \
+  --region=us-central1 \
+  --project=crp-pro-dig-plantillasenr \
+  --member="user:$(gcloud config get-value account)" \
+  --role="roles/run.invoker"
+
 Step 5: Redeploy
 docker build --platform linux/amd64 -t us-central1-docker.pkg.dev/crp-dev-dig-ailab/product-routing/product-routing:latest .
 docker push us-central1-docker.pkg.dev/crp-dev-dig-ailab/product-routing/product-routing:latest
@@ -41,3 +48,12 @@ curl -X GET $(gcloud run services describe product-routing --region=us-central1 
 Step 9: Update Environment Variables
 gcloud run services update product-routing --update-env-vars="$(grep -v '^#' .env | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"
 gcloud run services update product-routing --region=us-central1 --project=crp-dev-dig-ailab --update-env-vars="LLM_LOCATION=us-central1"
+
+Step 10: Proxy
+gcloud run services proxy product-routing-dev
+--project crp-pro-dig-plantillasenr
+--region us-central1
+--port 8082
+
+Step 11: Clean up
+gcloud run services delete product-routing --region=us-central1 --project=crp-dev-dig-ailab

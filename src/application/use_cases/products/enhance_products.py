@@ -3,8 +3,9 @@
 # ---------------------------------------------------------------------
 import json
 import logging
-from dataclasses import dataclass
 from typing import Any
+from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------
 # Third-party libraries
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------
 DEFAULT_BATCH_SIZE = 50
 MAX_RETRIES = 3
-
+WORKERS = 4
 
 # ---------------------------------------------------------------------
 # Command
@@ -76,13 +77,13 @@ class EnhanceProductsUseCase:
     # -----------------------------------------------------------------
     # Public API
     # -----------------------------------------------------------------
-    def execute(self, command: EnhanceProductsCommand) -> pd.DataFrame:
+    def execute(self, cmd: EnhanceProductsCommand) -> pd.DataFrame:
         try:
-            prompt = Prompt(command.prompt_path)
-            df = pd.read_excel(command.data_file)
+            prompt = Prompt(cmd.prompt_path)
+            df = pd.read_excel(cmd.data_file)
 
             prompt_data = self._build_prompt_data(df)
-            all_results = self._process_batches(prompt_data, prompt, command.batch_size)
+            all_results = self._process_batches(prompt_data, prompt, cmd.batch_size)
 
             if not all_results:
                 logger.warning("No results from LLM processing.")
@@ -137,15 +138,28 @@ class EnhanceProductsUseCase:
         all_results = []
         total_batches = (len(prompt_data) + batch_size - 1) // batch_size
 
-        for batch_idx, i in enumerate(range(0, len(prompt_data), batch_size), start=1):
-            batch = prompt_data[i:i + batch_size]
-            logger.info(f"Processing batch {batch_idx}/{total_batches} ({len(batch)} products)")
+        batches = [
+            prompt_data[i:i + batch_size]
+            for i in range(0, len(prompt_data), batch_size)
+        ]
 
-            result = self._process_single_batch(batch, prompt)
-            if result:
-                all_results.extend(result)
-            else:
-                logger.warning(f"Batch {batch_idx} returned no results.")
+        with ThreadPoolExecutor(max_workers=WORKERS) as executor:
+            future_to_batch = {
+                executor.submit(self._process_single_batch, batch, prompt): idx
+                for idx, batch in enumerate(batches, start=1)
+            }
+
+            for future in as_completed(future_to_batch):
+                batch_idx = future_to_batch[future]
+                try:
+                    result = future.result()
+                    if result:
+                        all_results.extend(result)
+                        logger.info(f"Batch {batch_idx}/{total_batches} processed successfully with {len(result)} results.")
+                    else:
+                        logger.warning(f"Batch {batch_idx}/{total_batches} returned no results.")
+                except Exception as e:
+                    logger.error(f"Batch {batch_idx}/{total_batches} failed: {e}", exc_info=True)
 
         return all_results
 

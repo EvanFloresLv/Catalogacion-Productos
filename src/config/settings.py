@@ -33,10 +33,17 @@ class GoogleCredentials(BaseModel):
     credentials: object | None = None
     project_id: str | None = None
 
+    class Config:
+        arbitrary_types_allowed = True
+
     @classmethod
     def from_default(cls):
-        credentials, project_id = default()
-        return cls(credentials=credentials, project_id=project_id)
+        try:
+            credentials, project_id = default()
+            return cls(credentials=credentials, project_id=project_id)
+        except Exception:
+            logging.warning("Google default credentials not available.")
+            return cls()
 
 
 class GeminiGenerationSettings(BaseSettings):

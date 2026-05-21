@@ -165,31 +165,27 @@ class EmbeddingRepositoryPG(EmbeddingRepository):
 
         self._validate_dimension(query_vector)
 
-        similarity_expr = (
-            (1.0 - EmbeddingModel.vector.cosine_distance(query_vector))
-            .label("similarity")
-        )
+        # Use cosine distance directly — HNSW index optimizes this ordering
+        distance_expr = EmbeddingModel.vector.cosine_distance(query_vector).label("distance")
 
-        stmt = select(EmbeddingModel, similarity_expr)
+        stmt = select(EmbeddingModel, distance_expr)
 
         if category_ids:
             stmt = stmt.where(
                 EmbeddingModel.category_id.in_(category_ids)
             )
 
-        stmt = (
-            stmt
-            .order_by(similarity_expr.desc())
-            .limit(limit)
-        )
+        # Order by distance ASC (closer = more similar) for HNSW efficiency
+        # Over-fetch to compensate for post-filtering, then trim
+        fetch_limit = limit * 3 if category_ids else limit
+        stmt = stmt.order_by(distance_expr.asc()).limit(fetch_limit)
 
         rows = self.session.execute(stmt).all()
 
         results: List[Tuple[Embedding, float]] = []
-
-        for model, similarity in rows:
-            score = max(0.0, min(1.0, float(similarity)))
-            results.append((self._to_entity(model), score))
+        for model, distance in rows[:limit]:
+            similarity = max(0.0, min(1.0, 1.0 - float(distance)))
+            results.append((self._to_entity(model), similarity))
 
         return results
 

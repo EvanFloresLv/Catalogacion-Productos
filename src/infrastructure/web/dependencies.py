@@ -19,6 +19,9 @@ from config.composition_root import (
 from infrastructure.persistence.postgresql.repositories.brand_repository_pg import (
     BrandRepositoryPG,
 )
+from infrastructure.persistence.postgresql.repositories.in_memory_embedding_repository import (
+    InMemoryEmbeddingRepository,
+)
 from infrastructure.embeddings.gemini.client import EmbeddingClient
 
 from application.use_cases.classification.classify_product import ClassifyProductUseCase
@@ -59,7 +62,7 @@ def get_classify_batch_use_case(session: Session) -> ClassifyBatchProductsUseCas
     return ClassifyBatchProductsUseCase(
         products=create_product_repository(session),
         brands=BrandRepositoryPG(session),
-        embeddings=create_embedding_repository(session),
+        embeddings=InMemoryEmbeddingRepository(session),
         category_query_service=create_category_query_service(session),
         service=EmbeddingClient(embedding_dim=768),
         uow=uow,

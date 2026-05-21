@@ -7,7 +7,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------
 # Third-party libraries
 # ---------------------------------------------------------------------
-from sqlalchemy import Integer, String, ForeignKey, DateTime, UniqueConstraint
+from sqlalchemy import Integer, String, ForeignKey, DateTime, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
@@ -26,6 +26,13 @@ class EmbeddingModel(Base):
             "category_id",
             "content_hash",
             name="uq_embeddings_category_hash",
+        ),
+        Index(
+            "ix_embeddings_vector_hnsw",
+            "vector",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"vector": "vector_cosine_ops"},
         ),
     )
 

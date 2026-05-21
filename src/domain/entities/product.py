@@ -193,6 +193,15 @@ class Product:
             keywords=self.keywords,
         )
 
+    def to_dict(self):
+        return {
+            "SKU": self.sku,
+            "Product Name": self.name,
+            "Description": self.description,
+            "Keywords": self.keywords,
+            "Category": self.category,
+        }
+
 if __name__ == "__main__":
 
     product = Product.create(

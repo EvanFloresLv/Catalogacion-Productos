@@ -18,6 +18,7 @@ from adapters.messaging.postgres_outbox_writer import PostgresOutboxWriter
 
 from infrastructure.persistence.postgresql.repositories.category_repository_pg import CategoryRepositoryPG
 from infrastructure.persistence.postgresql.repositories.embedding_repository_pg import EmbeddingRepositoryPG
+from infrastructure.persistence.postgresql.repositories.in_memory_embedding_repository import InMemoryEmbeddingRepository
 from infrastructure.persistence.postgresql.repositories.brand_repository_pg import BrandRepositoryPG
 from infrastructure.persistence.postgresql.repositories.product_repository_pg import ProductRepositoryPG
 from infrastructure.embeddings.gemini.client import EmbeddingClient
@@ -138,12 +139,12 @@ def test_classification_batch_products():
     with SessionLocal() as session:
         product_repo = ProductRepositoryPG(session)
 
-        cmd = ClassifyBatchProductsCommand(product_skus=["1185256673", "1145665252"], top_k=5)
+        cmd = ClassifyBatchProductsCommand(product_skus=["5014048091", "5014548850"], top_k=20)
 
         category_repo = CategoryRepositoryPG(session)
         category_query_service = CategoryQueryService(categories=category_repo)
         brand_repo = BrandRepositoryPG(session)
-        embedding_repo = EmbeddingRepositoryPG(session)
+        embedding_repo = InMemoryEmbeddingRepository(session)
         embedding_service = EmbeddingClient()
 
         uow = create_unit_of_work(session)
@@ -157,15 +158,14 @@ def test_classification_batch_products():
         )
         result = use_case.execute(cmd)
 
-        for product in cmd.product_skus:
-            print(f"\n✓ Product {product_repo.get_by_sku(product)}")
-            print(f"\n✓ Classification: {result.results.get(product)}")
+        # for product in cmd.product_skus:
+        #     print(f"\n✓ Product {product_repo.get_by_sku(product)}")
+        #     print(f"\n✓ Classification: {result.results.get(product)}")
 
-        if result.failed:
-            print(f"\n✗ Failed ({result.failed_count}):")
-            for sku, err in result.failed.items():
-                print(f"  - {sku}: {err}")
-
+        # if result.failed:
+        #     print(f"\n✗ Failed ({result.failed_count}):")
+        #     for sku, err in result.failed.items():
+        #         print(f"  - {sku}: {err}")
 
 def test_llm():
     import json
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     # test_load_file()
     # test_load_products()
     # test_load_brands()
-    test_classification_product()
-    # test_classification_batch_products()
+    # test_classification_product()
+    test_classification_batch_products()
     # setup_logging()
     # test_llm()

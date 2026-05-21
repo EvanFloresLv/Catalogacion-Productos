@@ -29,6 +29,12 @@ class CategoryQueryService:
     ):
         self._categories = categories
 
+    def get_by_id(self, category_id: str) -> Optional[Category]:
+        return self._categories.get_by_id(category_id)
+
+    def get_by_ids(self, category_ids: list[str]) -> list[Category]:
+        return self._categories.get_by_ids(category_ids)
+
 
     def get_category_tree(self, query: GetCategoryTreeQuery) -> List[Dict[str, Any]]:
         all_cats = self._categories.get_all() if hasattr(self._categories, "get_all") else []
@@ -90,3 +96,32 @@ class CategoryQueryService:
 
         path_parts.reverse()
         return " > ".join(path_parts)
+
+
+    def build_all_category_paths(self) -> Dict[str, str]:
+
+        all_cats = self._categories.get_all() if hasattr(self._categories, "get_all") else []
+        cat_map = {c.id: c for c in all_cats}
+        paths = {}
+
+        for cat in all_cats:
+
+            if cat.id in paths:
+                continue
+
+            path_parts = []
+            current_id: Optional[str] = cat.id
+            visited = set()
+
+            while current_id and current_id not in visited:
+                category = cat_map.get(current_id)
+                if not category:
+                    break
+                path_parts.append(category.name)
+                visited.add(current_id)
+                current_id = category.parent_id
+
+            path_parts.reverse()
+            paths[cat.id] = " > ".join(path_parts)
+
+        return paths

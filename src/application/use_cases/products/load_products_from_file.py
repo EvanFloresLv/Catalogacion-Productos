@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------
 import logging
 import re
+import ast
 from dataclasses import dataclass
 from typing import Any, Iterable, List
 
@@ -277,7 +278,6 @@ class LoadProductsFromFileUseCase:
         kw_value = row.get("keywords")
         if kw_value and isinstance(kw_value, str):
             # Try parsing as a Python list literal
-            import ast
             try:
                 parsed = ast.literal_eval(kw_value)
                 if isinstance(parsed, list):
@@ -395,7 +395,10 @@ class LoadProductsFromFileUseCase:
 
         # SKU: convert float (e.g. 4.016589e+06) to int string
         sku_raw = row.get("código sku")
-        sku = str(int(float(sku_raw))) if pd.notna(sku_raw) else ""
+        sku = str(int(float(sku_raw))) if pd.notna(sku_raw) else None
+
+        if not sku:
+            raise ValueError("Can not insert product without SKU (Identifier).")
 
         return Product.create(
             sku=sku,

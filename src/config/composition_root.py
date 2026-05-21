@@ -16,6 +16,9 @@ from infrastructure.persistence.postgresql.repositories.category_repository_pg i
 from infrastructure.persistence.postgresql.repositories.embedding_repository_pg import (
     EmbeddingRepositoryPG,
 )
+from infrastructure.persistence.postgresql.repositories.in_memory_embedding_repository import (
+    InMemoryEmbeddingRepository,
+)
 from infrastructure.persistence.postgresql.repositories.product_repository_pg import (
     ProductRepositoryPG,
 )
@@ -49,6 +52,7 @@ from application.use_cases.categories.load_categories_from_file import (
 )
 from application.use_cases.products.load_products import LoadProductsUseCase
 from application.use_cases.classification.classify_product import ClassifyProductUseCase
+from application.use_cases.classification.classify_batch_products import ClassifyBatchProductsUseCase
 
 
 # -----------------------------------------------------------------
@@ -72,7 +76,6 @@ def create_product_repository(session: Session) -> ProductRepositoryPG:
 # Event bus factory
 # -----------------------------------------------------------------
 def create_event_bus() -> InProcessEventBus:
-    """Create an event bus with all projection handlers wired."""
     bus = InProcessEventBus()
     wire_projections(bus, SessionLocal)
     return bus
@@ -147,4 +150,20 @@ def create_classify_product_use_case(
         embeddings=create_embedding_repository(session),
         embeddings_service=EmbeddingClient(embedding_dim=768),
         uow=uow,
+    )
+
+
+def create_classify_batch_products_use_case(
+    session: Session,
+    uow: Optional[UnitOfWork] = None,
+) -> ClassifyBatchProductsUseCase:
+    uow = uow or create_unit_of_work(session)
+    return ClassifyBatchProductsUseCase(
+        products=create_product_repository(session),
+        brands=BrandRepositoryPG(session),
+        embeddings=InMemoryEmbeddingRepository(session),
+        category_query_service=create_category_query_service(session),
+        service=EmbeddingClient(embedding_dim=768),
+        uow=uow,
+        session_factory=SessionLocal,
     )
