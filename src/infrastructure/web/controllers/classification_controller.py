@@ -2,7 +2,9 @@
 # Controller — Classification Endpoints
 # -----------------------------------------------------------------
 from __future__ import annotations
+
 import re
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -18,7 +20,6 @@ from infrastructure.web.schemas.classification_schemas import (
     ClassifyBatchProductsRequest,
     ClassifyProductResponse,
     BatchClassificationResponse,
-    ClassificationResultResponse,
     CategoryMatchResponse,
     QueryConstraintsResponse,
 )
@@ -68,6 +69,7 @@ def _to_query_response(query_str: str | None) -> QueryConstraintsResponse | None
 def _to_result_response(result, product_name: str = "") -> dict | None:
     if result is None:
         return None
+
     return {
         "product_sku": result.product_sku,
         "product_name": product_name,
@@ -96,6 +98,8 @@ def classify_product(
     body: ClassifyProductRequest,
     session: Session = Depends(get_session),
 ):
+    start_time = time.time()
+
     use_case = get_classify_product_use_case(session)
     cmd = ClassifyProductCommand(product_sku=body.product_sku, top_k=body.top_k)
     results = use_case.execute(cmd)
@@ -110,7 +114,8 @@ def classify_product(
         results={
             business: _to_result_response(result, product_name)
             for business, result in results.items()
-        }
+        },
+        time=time.time() - start_time,
     )
 
 
@@ -119,6 +124,8 @@ def classify_batch(
     body: ClassifyBatchProductsRequest,
     session: Session = Depends(get_session),
 ):
+    start_time = time.time()
+
     use_case = get_classify_batch_use_case(session)
     cmd = ClassifyBatchProductsCommand(
         product_skus=tuple(body.product_skus),
@@ -143,4 +150,5 @@ def classify_batch(
         succeeded_count=batch.succeeded_count,
         failed_count=batch.failed_count,
         total=batch.total,
+        time=time.time() - start_time,
     )

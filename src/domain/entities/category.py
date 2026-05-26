@@ -10,7 +10,6 @@ from typing import Tuple, Any
 # Internal application imports
 # ---------------------------------------------------------------------
 from .errors import CategoryNameError
-from .brand import Brand
 
 from domain.value_objects.semantic_hash import SemanticHash
 from utils.domain_validatons import validate_entity_fields, normalize_str
@@ -19,6 +18,7 @@ from utils.domain_validatons import validate_entity_fields, normalize_str
 # -------------------------------------------------------------
 # Entity
 # -------------------------------------------------------------
+
 @dataclass(frozen=True, slots=True)
 class Category:
 

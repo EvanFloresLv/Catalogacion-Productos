@@ -3,7 +3,8 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -35,3 +36,11 @@ class ClassificationResult:
         return {
             "Results": [m.to_dict() for m in self.top_k],
         }
+
+
+@dataclass
+class ClassificationContext:
+    brand_cache: dict[str, Any | None] = field(default_factory=dict)
+    category_id_cache: dict[tuple, tuple[set[str], object | None]] = field(default_factory=dict)
+    path_cache: dict[str, str] = field(default_factory=dict)
+    category_entity_cache: dict[str, Any | None] = field(default_factory=dict)

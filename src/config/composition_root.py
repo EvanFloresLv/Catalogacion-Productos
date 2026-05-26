@@ -162,8 +162,7 @@ def create_classify_batch_products_use_case(
         products=create_product_repository(session),
         brands=BrandRepositoryPG(session),
         embeddings=InMemoryEmbeddingRepository(session),
+        embedding_service=EmbeddingClient(embedding_dim=768),
         category_query_service=create_category_query_service(session),
-        service=EmbeddingClient(embedding_dim=768),
         uow=uow,
-        session_factory=SessionLocal,
     )

@@ -48,6 +48,7 @@ class ClassificationResultResponse(BaseModel):
 
 class ClassifyProductResponse(BaseModel):
     results: dict[str, ClassificationResultResponse | None]
+    time: float
 
 
 class BatchClassificationResponse(BaseModel):
@@ -56,3 +57,4 @@ class BatchClassificationResponse(BaseModel):
     succeeded_count: int
     failed_count: int
     total: int
+    time: float

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------
 DEFAULT_BATCH_SIZE = 50
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 MAX_WORKERS = 4
 
 # ---------------------------------------------------------------------
@@ -47,14 +47,12 @@ class EnhanceClassificationCommand:
 # ---------------------------------------------------------------------
 class EnhanceClassificationUseCase:
     """
-    Sends product + candidate categories to an LLM to select and rank
-    the best category per product/business.
+    Sends product + candidate categories to an LLM to filter relevant ones.
 
     Returns a list of dicts with:
       - product_sku
       - business
-      - best_category_id
-      - ranked (list of category_ids ordered by relevance)
+      - relevant_categories (list of category_ids ordered by relevance, may be empty)
     """
 
     def __init__(self, model: str = "gemini-2.5-flash"):

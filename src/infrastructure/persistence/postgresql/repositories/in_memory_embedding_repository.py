@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 
 from domain.entities.embedding import Embedding
 from domain.repositories.embedding_repository import EmbeddingRepository
+
+from infrastructure.persistence.postgresql.session import SessionLocal
+from infrastructure.persistence.postgresql.repositories.embedding_repository_pg import EmbeddingRepositoryPG
 from infrastructure.persistence.postgresql.models.embedding_model import EmbeddingModel
 
 logger = logging.getLogger(__name__)
@@ -90,10 +93,28 @@ class InMemoryEmbeddingRepository(EmbeddingRepository):
 
     @classmethod
     def reload(cls, session: Session) -> None:
+        """Force reload synchronously."""
         with cls._lock:
             cls._loaded = False
-        repo = cls(session)
-        return repo
+        cls(session)
+
+    @classmethod
+    def invalidate_async(cls, session_factory) -> None:
+        def _reload():
+            try:
+                session = session_factory()
+                try:
+                    with cls._lock:
+                        cls._loaded = False
+                    cls(session)
+                    logger.info("In-memory embeddings reloaded (background).")
+                finally:
+                    session.close()
+            except Exception:
+                logger.exception("Background embedding reload failed.")
+
+        thread = threading.Thread(target=_reload, daemon=True)
+        thread.start()
 
     # -----------------------------------------------------------------
     # Similarity Search (vectorized NumPy)
@@ -153,15 +174,19 @@ class InMemoryEmbeddingRepository(EmbeddingRepository):
     # Pass-through write operations (delegate to DB via session)
     # -----------------------------------------------------------------
     def save(self, embedding: Embedding) -> None:
-        from infrastructure.persistence.postgresql.repositories.embedding_repository_pg import EmbeddingRepositoryPG
         EmbeddingRepositoryPG(self._session).save(embedding)
-        InMemoryEmbeddingRepository._loaded = False  # Invalidate cache
+        self._schedule_reload()
 
     def save_batch(self, embeddings: list[Embedding]) -> list[Embedding]:
-        from infrastructure.persistence.postgresql.repositories.embedding_repository_pg import EmbeddingRepositoryPG
         result = EmbeddingRepositoryPG(self._session).save_batch(embeddings)
-        InMemoryEmbeddingRepository._loaded = False  # Invalidate cache
+        self._schedule_reload()
         return result
+
+    def _schedule_reload(self) -> None:
+        try:
+            InMemoryEmbeddingRepository.invalidate_async(SessionLocal)
+        except Exception:
+            InMemoryEmbeddingRepository._loaded = False
 
     def get_by_category_id(self, category_id) -> Optional[Embedding]:
         indices = InMemoryEmbeddingRepository._cat_id_to_indices.get(str(category_id), [])
@@ -175,7 +200,6 @@ class InMemoryEmbeddingRepository(EmbeddingRepository):
         return results
 
     def find_by_hashes(self, hashes: List[str]) -> List[Embedding]:
-        from infrastructure.persistence.postgresql.repositories.embedding_repository_pg import EmbeddingRepositoryPG
         return EmbeddingRepositoryPG(self._session).find_by_hashes(hashes)
 
     # -----------------------------------------------------------------

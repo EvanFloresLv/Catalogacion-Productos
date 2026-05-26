@@ -13,15 +13,11 @@ from domain.events.category_events import (
     CategoryCreatedEvent,
     CategoryKeywordsEnhancedEvent,
 )
-from domain.events.product_events import (
-    ProductClassifiedEvent,
-)
 from domain.events.embedding_events import EmbeddingGeneratedEvent
 
 # Read models
 from infrastructure.persistence.postgresql.models.read_models import (
     CategorySummaryReadModel,
-    ProductClassificationReadModel,
     EventLogReadModel,
     EmbeddingStatsReadModel,
 )
@@ -193,47 +189,7 @@ class CategorySummaryProjection(Projection):
 
 
 # =================================================================
-# 3. Product Classification Projection
-# =================================================================
-class ProductClassificationProjection(Projection):
-    """
-    Appends a row to rm_product_classification on each classification.
-
-    Handles:
-      - ProductClassifiedEvent
-    """
-
-    def on_product_classified(self, event: ProductClassifiedEvent) -> None:
-        session = self._get_session()
-        try:
-            row = ProductClassificationReadModel(
-                sku=event.sku,
-                business=event.business,
-                best_category_id=event.best_category_id,
-                best_score=event.best_score,
-                top_k_count=event.top_k_count,
-            )
-            session.add(row)
-            session.commit()
-            logger.info(
-                "[Projection:ProductClassification] ✓ %s → %s (%.4f)",
-                event.sku,
-                event.best_category_id,
-                event.best_score,
-            )
-        except Exception as exc:
-            session.rollback()
-            logger.error(
-                "[Projection:ProductClassification] ✗ Failed for %s: %s",
-                event.sku,
-                exc,
-            )
-        finally:
-            session.close()
-
-
-# =================================================================
-# 4. Embedding Stats Projection
+# 3. Embedding Stats Projection
 # =================================================================
 class EmbeddingStatsProjection(Projection):
     """

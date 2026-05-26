@@ -13,7 +13,6 @@ from application.ports.event_bus import EventBus
 from application.event_handlers.projections import (
     EventLogProjection,
     CategorySummaryProjection,
-    ProductClassificationProjection,
     EmbeddingStatsProjection,
 )
 
@@ -48,10 +47,6 @@ def wire_projections(bus: EventBus, session_factory) -> EventBus:
     bus.subscribe(CategoryCreatedEvent, cat_summary.on_category_created)
     # bus.subscribe(CategoryKeywordsEnhancedEvent, cat_summary.on_keywords_enhanced)
     bus.subscribe(EmbeddingGeneratedEvent, cat_summary.on_embedding_generated)
-
-    # --- Product Classification ---
-    prod_class = ProductClassificationProjection(session_factory)
-    bus.subscribe(ProductClassifiedEvent, prod_class.on_product_classified)
 
     # --- Embedding Stats ---
     emb_stats = EmbeddingStatsProjection(session_factory)

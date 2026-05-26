@@ -5,7 +5,6 @@ from typing import List
 from shared.kernel.aggregate_root import AggregateRoot
 from domain.entities.product import Product
 from domain.entities.result import ClassificationResult, CategoryMatch
-from domain.events.product_events import ProductClassifiedEvent
 
 
 class ProductClassification(AggregateRoot):
@@ -61,13 +60,5 @@ class ProductClassification(AggregateRoot):
             query=query
         )
         self._results.append(result)
-
-        self._record_event(ProductClassifiedEvent(
-            sku=self._product.sku,
-            business=business,
-            best_category_id=top_k[0].category_id,
-            best_score=top_k[0].score,
-            top_k_count=len(top_k),
-        ))
 
         return result
