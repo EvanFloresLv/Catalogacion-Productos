@@ -128,6 +128,9 @@ class SimilaritySearchService:
                     results.append((sku, business, None, None))
                     continue
 
+                if not self._embeddings._vectors:
+                    self._embeddings._load_all()
+
                 raw = self._embeddings.search_similar(
                     query_vector=vector,
                     category_ids=list(category_ids),
