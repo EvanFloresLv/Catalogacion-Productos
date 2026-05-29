@@ -2,6 +2,7 @@
 # Standard library
 # ---------------------------------------------------------------------
 import math
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 # ---------------------------------------------------------------------
@@ -9,6 +10,9 @@ from concurrent.futures import ThreadPoolExecutor
 # ---------------------------------------------------------------------
 from domain.entities.result import CategoryMatch
 from domain.entities.result import ClassificationContext
+
+
+logger = logging.getLogger(__name__)
 
 
 class SimilaritySearchService:
@@ -38,6 +42,9 @@ class SimilaritySearchService:
         failed = {}
 
         work_items = []
+
+        logger.info("Starting similarity search for %d products and %d embeddings",
+                    len(product_data), len(embeddings_map))
 
         for sku, data in product_data.items():
             vector = embeddings_map.get(sku)
@@ -127,9 +134,6 @@ class SimilaritySearchService:
                 if not category_ids:
                     results.append((sku, business, None, None))
                     continue
-
-                if not self._embeddings._vectors:
-                    self._embeddings._load_all()
 
                 raw = self._embeddings.search_similar(
                     query_vector=vector,

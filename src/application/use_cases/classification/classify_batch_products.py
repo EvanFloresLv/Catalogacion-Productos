@@ -94,10 +94,22 @@ class ClassifyBatchProductsUseCase:
             )
             logger.info("Prepare phase: %.2fs (%d products loaded)", time.time() - prep_start, len(product_data))
 
+            if not product_data:
+                logger.warning("No products found for SKUs: %s", cmd.product_skus)
+                for sku in cmd.product_skus:
+                    failed[sku] = f"Product with SKU {sku} not found"
+                return BatchClassificationResult(results={}, failed=failed)
+
             # Phase 2: Generate embeddings
             embed_start = time.time()
             embeddings_map = self._embedding_pipeline.generate(product_data)
             logger.info("Embedding phase: %.2fs (%d embeddings)", time.time() - embed_start, len(embeddings_map))
+
+            if not embeddings_map:
+                logger.warning("No embeddings generated for any product")
+
+            logger.info("Pre-search state: %d products, %d embeddings",
+                        len(product_data), len(embeddings_map))
 
             # Phase 3: Category resolution (use shared path cache)
             cache_start = time.time()
@@ -110,6 +122,10 @@ class ClassifyBatchProductsUseCase:
 
             # Phase 4: Similarity search
             search_start = time.time()
+            logger.info(
+                "Starting similarity search for %d products",
+                len(product_data),
+            )
             results, failed = self._similarity_search_service.classify(
                 context=context,
                 product_data=product_data,
