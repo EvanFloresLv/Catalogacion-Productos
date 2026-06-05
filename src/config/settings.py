@@ -94,10 +94,40 @@ class LoggingSettings(BaseSettings):
     }
 
 
+class ClassificationSettings(BaseSettings):
+    """Tunables for the classification pipeline."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_file_override=False,
+        env_prefix="CLASSIFY_",
+        extra="ignore",
+    )
+
+    embedding_dim: int = 768
+
+    # Concurrency / batch sizes
+    embedding_batch_size: int = 50
+    embedding_max_workers: int = 4
+    search_max_workers: int = 4
+    max_products_per_batch: int = 100
+
+    # LLM re-rank policy
+    enhance_by_default: bool = True
+    enhance_threshold: float = 0.70  # only re-rank when top1 cosine < threshold
+
+    # Reject policy: if the final top1 cosine is below
+    # ``min_confidence``, the per-business classification is reported
+    # as ``None`` (i.e. "I don't know"). Set to 0.0 to disable.
+    min_confidence: float = 0.55
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        env_file_override=False,
         extra="ignore",
     )
 
@@ -111,3 +141,4 @@ class Settings(BaseSettings):
 settings = Settings()
 logging_settings = LoggingSettings()
 gemini_settings = GeminiGenerationSettings()
+classification_settings = ClassificationSettings()

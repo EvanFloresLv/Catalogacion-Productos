@@ -84,23 +84,29 @@ class CategoryCatalog(AggregateRoot):
 
             if len(all_keywords) > original_count:
 
-                new_cat = Category.create(
-                    id=cat.id,
-                    name=cat.name,
-                    level=cat.level,
-                    parent_id=cat.parent_id,
-                    description=cat.description,
-                    keywords=tuple(sorted(all_keywords)),
-                    gender=cat.gender,
-                    direction=cat.direction,
-                    brand=cat.brand,
-                    is_leaf=cat.is_leaf,
-                    article_group=cat.article_group,
-                    business=cat.business,
-                )
-
-                self._categories[cat.id] = new_cat
-                enhanced.append(new_cat)
+                try:
+                    new_cat = Category.create(
+                        id=cat.id,
+                        name=cat.name,
+                        level=cat.level,
+                        parent_id=cat.parent_id,
+                        description=cat.description,
+                        keywords=tuple(sorted(all_keywords)),
+                        gender=cat.gender,
+                        direction=cat.direction,
+                        brand=cat.brand,
+                        is_leaf=cat.is_leaf,
+                        article_group=cat.article_group,
+                        business=cat.business,
+                    )
+                except Exception:
+                    # If the re-creation fails for any reason, keep
+                    # the original category so we never silently lose
+                    # it from the catalog.
+                    enhanced.append(cat)
+                else:
+                    self._categories[cat.id] = new_cat
+                    enhanced.append(new_cat)
 
                 self._record_event(CategoryKeywordsEnhancedEvent(
                     category_id=cat.id,

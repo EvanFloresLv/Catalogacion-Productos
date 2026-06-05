@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------
 """
 Centralised factory for creating every Infrastructure-layer object:
-ORM read-models, outbox rows, and event-bus instances.
+ORM read-models and event-bus instances.
 
 Usage
 -----
@@ -16,11 +16,6 @@ from __future__ import annotations
 import json
 
 from shared.kernel.domain_event import DomainEvent
-
-# ── ORM Write Models ─────────────────────────────────────────────
-from infrastructure.persistence.postgresql.models.outbox_model import (
-    OutboxModel,
-)
 
 # ── ORM Read Models ──────────────────────────────────────────────
 from infrastructure.persistence.postgresql.models.read_models import (
@@ -38,21 +33,6 @@ from application.event_handlers.wiring import wire_projections
 
 class InfrastructureFactory:
     """Static factory methods for infrastructure-layer objects."""
-
-    # =============================================================
-    #  OUTBOX
-    # =============================================================
-
-    @staticmethod
-    def create_outbox_entry(*, event: DomainEvent) -> OutboxModel:
-        """Create an OutboxModel row from a domain event."""
-        return OutboxModel(
-            event_type=event.event_type,
-            event_id=event.event_id,
-            occurred_on=event.occurred_on,
-            payload=json.dumps(event.to_dict(), default=str),
-            processed=False,
-        )
 
     # =============================================================
     #  READ MODELS

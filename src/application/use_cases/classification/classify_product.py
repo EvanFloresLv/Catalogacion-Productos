@@ -25,6 +25,7 @@ from domain.entities.result import ClassificationResult, CategoryMatch
 from domain.aggregates.product_classification_catalog import ProductClassification
 
 from shared.kernel.unit_of_work import UnitOfWork
+from utils.business import intersect_businesses
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -116,22 +117,12 @@ class ClassifyProductUseCase:
     # Business resolution
     # -----------------------------------------------------------------
     def _resolve_businesses(self, product: Product) -> set[str]:
-        product_businesses = set(product.business)
         brand = self._brands.get_by_name(product.brand)
 
         if not brand:
-            return product_businesses
+            return set(product.business)
 
-        # Normalize brand business names to canonical format
-        # DB may store "blp_liverpool" but we use "liverpool-blp"
-        normalized_brand_businesses = set()
-        for b in brand.business:
-            if b.startswith("blp_"):
-                normalized_brand_businesses.add(f"{b[4:]}-blp")
-            else:
-                normalized_brand_businesses.add(b)
-
-        return product_businesses & normalized_brand_businesses
+        return intersect_businesses(product.business, brand.business)
 
     # -----------------------------------------------------------------
     # Single-business classification
@@ -174,45 +165,96 @@ class ClassifyProductUseCase:
     # -----------------------------------------------------------------
     def _fetch_allowed_category_ids(self, product: Product, business: str) -> tuple[set[str], GetCategoriesByConstraintsQuery | None]:
         brand = product.brand if "blp" in business else None
-        # gender = product.gender if product.gender in ("hombre", "mujer") else None
-        gender = None
+        gender = product.gender if product.gender in ("hombre", "mujer", "unisex") else None
 
-        # Strategy 1: Full constraints (article_group has highest priority)
-        if product.article_group:
-            ids, query = self._query_categories(
-                article_group=list(product.article_group),
+        # Single multi-strategy SQL: returns ALL candidate IDs ranked by
+        # the most specific strategy that produced them. Saves up to 3
+        # DB round-trips per business per product.
+        rows = self._category_query_service.get_categories_by_cascade(
+            business=business,
+            brand=brand,
+            gender=gender,
+            article_group=list(product.article_group) if product.article_group else None,
+            is_leaf=True,
+        )
+
+        if rows:
+            ids = {cat.id for _, cat in rows}
+            first_priority, _ = rows[0]
+            query = self._build_query_for_priority(
+                priority=first_priority,
+                product=product,
+                business=business,
+                gender=gender,
+                brand=brand,
+            )
+            return ids, query
+
+        # Final fallback (matches the old behavior for the no-candidates case)
+        return self._query_categories(
+            business=business,
+            brand=brand,
+            is_leaf=True,
+        )
+
+        if rows:
+            ids = {cat.id for _, cat in rows}
+            first_priority, _ = rows[0]
+            query = self._build_query_for_priority(
+                priority=first_priority,
+                product=product,
+                business=business,
+                gender=gender,
+                brand=brand,
+            )
+            return ids, query
+
+        # Final fallback (matches the old behavior for the no-candidates case)
+        return self._query_categories(
+            business=business,
+            brand=brand,
+            is_leaf=True,
+        )
+
+    @staticmethod
+    def _build_query_for_priority(
+        *,
+        priority: int,
+        product: Product,
+        business: str,
+        gender: str | None,
+        brand: str | None,
+    ) -> GetCategoriesByConstraintsQuery:
+        if priority == 1:
+            return GetCategoriesByConstraintsQuery(
+                article_group=list(product.article_group) if product.article_group else None,
                 business=business,
                 gender=gender,
                 brand=brand,
                 is_leaf=True,
             )
-            if ids:
-                return ids, query
-
-            # Strategy 2: Drop gender, keep article_group
-            ids, query = self._query_categories(
-                article_group=list(product.article_group),
+        if priority == 2:
+            return GetCategoriesByConstraintsQuery(
+                article_group=list(product.article_group) if product.article_group else None,
                 business=business,
                 brand=brand,
                 is_leaf=True,
             )
-            if ids:
-                return ids, query
-
-        # Strategy 3: Drop article_group, use gender
-        ids, query = self._query_categories(
+        if priority == 3:
+            return GetCategoriesByConstraintsQuery(
+                business=business,
+                gender=gender,
+                brand=brand,
+                is_leaf=True,
+            )
+        if priority == 4:
+            return GetCategoriesByConstraintsQuery(
+                business=business,
+                brand=brand,
+                is_leaf=True,
+            )
+        return GetCategoriesByConstraintsQuery(
             business=business,
-            gender=gender,
-            brand=brand,
-            is_leaf=True,
-        )
-        if ids:
-            return ids, query
-
-        # Strategy 4: Broadest — just business + is_leaf
-        return self._query_categories(
-            business=business,
-            brand=brand,
             is_leaf=True,
         )
 

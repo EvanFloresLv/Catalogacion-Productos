@@ -16,9 +16,6 @@ from infrastructure.persistence.postgresql.repositories.category_repository_pg i
 from infrastructure.persistence.postgresql.repositories.embedding_repository_pg import (
     EmbeddingRepositoryPG,
 )
-from infrastructure.persistence.postgresql.repositories.in_memory_embedding_repository import (
-    InMemoryEmbeddingRepository,
-)
 from infrastructure.persistence.postgresql.repositories.product_repository_pg import (
     ProductRepositoryPG,
 )
@@ -26,13 +23,12 @@ from infrastructure.persistence.postgresql.repositories.brand_repository_pg impo
     BrandRepositoryPG,
 )
 
-# Infrastructure — UoW + Outbox
+# Infrastructure — UoW
 from infrastructure.persistence.postgresql.unit_of_work import SqlAlchemyUnitOfWork
 from infrastructure.persistence.postgresql.session import SessionLocal
-from adapters.messaging.postgres_outbox_writer import PostgresOutboxWriter
 
 # Infrastructure — External services
-from infrastructure.embeddings.gemini.client import EmbeddingClient
+from infrastructure.embeddings.singleton import get_embedding_client
 
 # Application — Event handlers
 from application.event_handlers.logging_handler import LoggingEventHandler
@@ -88,7 +84,6 @@ def create_unit_of_work(
     session: Session,
     event_handlers: Optional[List[EventHandler]] = None,
 ) -> SqlAlchemyUnitOfWork:
-    outbox = PostgresOutboxWriter(session)
     if event_handlers is None:
         bus = create_event_bus()
         event_handlers = [
@@ -97,7 +92,6 @@ def create_unit_of_work(
         ]
     return SqlAlchemyUnitOfWork(
         session=session,
-        outbox=outbox,
         event_handlers=event_handlers,
     )
 
@@ -123,7 +117,7 @@ def create_load_categories_from_file_use_case(
         category_repository=create_category_repository(session),
         brand_repository=BrandRepositoryPG(session),
         embedding_repository=create_embedding_repository(session),
-        embedding_service=EmbeddingClient(embedding_dim=768),
+        embedding_service=get_embedding_client(embedding_dim=768),
         uow=uow,
     )
 
@@ -148,7 +142,7 @@ def create_classify_product_use_case(
         products=create_product_repository(session),
         category_query_service=create_category_query_service(session),
         embeddings=create_embedding_repository(session),
-        embeddings_service=EmbeddingClient(embedding_dim=768),
+        embeddings_service=get_embedding_client(embedding_dim=768),
         uow=uow,
     )
 
@@ -161,8 +155,8 @@ def create_classify_batch_products_use_case(
     return ClassifyBatchProductsUseCase(
         products=create_product_repository(session),
         brands=BrandRepositoryPG(session),
-        embeddings=InMemoryEmbeddingRepository(session),
-        embedding_service=EmbeddingClient(embedding_dim=768),
+        embeddings=create_embedding_repository(session),
+        embedding_service=get_embedding_client(embedding_dim=768),
         category_query_service=create_category_query_service(session),
         uow=uow,
     )

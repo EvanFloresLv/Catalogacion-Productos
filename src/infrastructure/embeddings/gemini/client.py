@@ -33,6 +33,7 @@ class EmbeddingClient(EmbeddingService):
 
     def __init__(
         self,
+        client: genai.Client | None = None,
         timeout_seconds: float = 15.0,
         retry_attempts: int = 3,
         embedding_dim: int = 768,
@@ -46,7 +47,10 @@ class EmbeddingClient(EmbeddingService):
         self._breaker = CircuitBreaker()
         self._lock = threading.Lock()  # protect breaker updates
 
-        self._client = genai.Client(
+        # Reuse a process-wide genai.Client when one is provided.
+        # Avoid re-running google.auth.default() and re-creating gRPC
+        # channels on every request.
+        self._client = client or genai.Client(
             vertexai=True,
             credentials=gemini_settings.google.credentials,
             project=gemini_settings.google.project_id,

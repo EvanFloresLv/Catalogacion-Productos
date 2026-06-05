@@ -13,14 +13,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Third-party libraries
 # ---------------------------------------------------------------------
 from llm_sdk.sync_sdk import LLM
-from llm_sdk.providers.sync_registry import ProviderSpec
-from llm_sdk_provider_gemini import SyncGeminiClient
 from llm_sdk.domain.chat import ChatMessage, ChatPart
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
 from utils.prompt import Prompt
+from infrastructure.llm.sdk_factory import get_llm_sdk
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,6 +30,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_BATCH_SIZE = 50
 MAX_RETRIES = 2
 MAX_WORKERS = 4
+
+# Re-ranking MUST be deterministic. We default to the re-ranker
+# settings, but allow per-call override via the constructor.
+DEFAULT_RERANK_TEMPERATURE = 0.7
+DEFAULT_RERANK_MAX_TOKENS = None  # Let the model decide how many tokens it needs to output the ranked list.
 
 # ---------------------------------------------------------------------
 # Command
@@ -47,7 +51,7 @@ class EnhanceClassificationCommand:
 # ---------------------------------------------------------------------
 class EnhanceClassificationUseCase:
     """
-    Sends product + candidate categories to an LLM to filter relevant ones.
+    Sends product + candidate categories to an LLM to re-rank them.
 
     Returns a list of dicts with:
       - product_sku
@@ -55,18 +59,17 @@ class EnhanceClassificationUseCase:
       - relevant_categories (list of category_ids ordered by relevance, may be empty)
     """
 
-    def __init__(self, model: str = "gemini-2.5-flash"):
+    def __init__(
+        self,
+        model: str = "gemini-2.5-flash",
+        temperature: float = DEFAULT_RERANK_TEMPERATURE,
+        max_tokens: int = DEFAULT_RERANK_MAX_TOKENS,
+        sdk: LLM | None = None,
+    ):
         self._model = model
-        self._sdk = self._init_sdk()
-
-    def _init_sdk(self) -> LLM:
-        sdk = LLM.default()
-        sdk.registry.register(ProviderSpec(
-            name="gemini",
-            factory=lambda: SyncGeminiClient(location=sdk.settings.gemini.location),
-            models={self._model},
-        ))
-        return sdk
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+        self._sdk = sdk or get_llm_sdk()
 
     # -----------------------------------------------------------------
     # Public API
@@ -126,12 +129,16 @@ class EnhanceClassificationUseCase:
             try:
                 resp = self._sdk.chat(
                     messages=[
-                        ChatMessage(role="model", parts=[ChatPart(type="text", text=system)]),
-                        ChatMessage(role="user", parts=[ChatPart(type="text", text=user)]),
+                        ("model", system),
+                        ("user", user),
                     ],
                     output_schema=schema,
+                    output_mime_type="application/json",
                     provider="gemini",
                     model=self._model,
+                    # Deterministic re-ranking.
+                    temperature=self._temperature,
+                    max_output_tokens=self._max_tokens,
                 )
                 result = json.loads(resp.content)
                 return result if isinstance(result, list) else [result]

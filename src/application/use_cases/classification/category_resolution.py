@@ -14,7 +14,7 @@ class CategoryResolutionService:
 
     def cache_key(self, product: Product, business: str) -> tuple:
         brand = product.brand if "blp" in business else None
-        gender = product.gender if product.gender in ("hombre", "mujer") else None
+        gender = product.gender if product.gender in ("hombre", "mujer", "unisex") else None
         article_group = tuple(sorted(product.article_group)) if product.article_group else None
 
         return article_group, business, gender, brand
@@ -103,41 +103,81 @@ class CategoryResolutionService:
         brand: str | None,
     ):
 
-        if article_group:
-            ids, query = self._query_categories(
-                article_group=list(article_group),
+        rows = self._category_query_service.get_categories_by_cascade(
+            business=business,
+            brand=brand,
+            gender=gender,
+            article_group=list(article_group) if article_group else None,
+            is_leaf=True,
+        )
+
+        if not rows:
+            return self._query_categories(
                 business=business,
                 gender=gender,
                 brand=brand,
                 is_leaf=True,
             )
 
-            if ids:
-                return ids, query
-
-            ids, query = self._query_categories(
-                article_group=list(article_group),
+        ids = {cat.id for _, cat in rows}
+        if not ids:
+            return self._query_categories(
                 business=business,
+                gender=gender,
                 brand=brand,
                 is_leaf=True,
             )
 
-            if ids:
-                return ids, query
-
-        ids, query = self._query_categories(
+        first_priority, _first_cat = rows[0]
+        query = self._build_query_for_priority(
+            priority=first_priority,
+            article_group=article_group,
             business=business,
             gender=gender,
             brand=brand,
-            is_leaf=True,
         )
+        return ids, query
 
-        if ids:
-            return ids, query
+    @staticmethod
+    def _build_query_for_priority(
+        *,
+        priority: int,
+        article_group: tuple | None,
+        business: str,
+        gender: str | None,
+        brand: str | None,
+    ) -> GetCategoriesByConstraintsQuery:
 
-        return self._query_categories(
+        if priority == 1:
+            return GetCategoriesByConstraintsQuery(
+                article_group=list(article_group) if article_group else None,
+                business=business,
+                gender=gender,
+                brand=brand,
+                is_leaf=True,
+            )
+        if priority == 2:
+            return GetCategoriesByConstraintsQuery(
+                article_group=list(article_group) if article_group else None,
+                business=business,
+                brand=brand,
+                is_leaf=True,
+            )
+        if priority == 3:
+            return GetCategoriesByConstraintsQuery(
+                business=business,
+                gender=gender,
+                brand=brand,
+                is_leaf=True,
+            )
+        if priority == 4:
+            return GetCategoriesByConstraintsQuery(
+                business=business,
+                brand=brand,
+                is_leaf=True,
+            )
+        return GetCategoriesByConstraintsQuery(
             business=business,
-            brand=brand,
             is_leaf=True,
         )
 

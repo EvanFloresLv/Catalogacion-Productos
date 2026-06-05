@@ -36,7 +36,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-nltk.download("stopwords")
+_STOPWORDS: set[str] | None = None
+
+def _get_stopwords() -> set[str]:
+    global _STOPWORDS
+    if _STOPWORDS is not None:
+        return _STOPWORDS
+    try:
+        _STOPWORDS = set(stopwords.words("spanish"))
+    except LookupError:
+        try:
+            nltk.download("stopwords", quiet=True)
+            _STOPWORDS = set(stopwords.words("spanish"))
+        except Exception as exc:
+            logger.warning("Could not load NLTK stopwords (%s); using empty set", exc)
+            _STOPWORDS = set()
+    return _STOPWORDS
 
 
 # ---------------------------------------------------------------------
@@ -68,7 +83,9 @@ class LoadProductsFromFileUseCase:
         "ProductTypeSAP",
     ]
 
-    STOPWORDS = set(stopwords.words("spanish"))
+    @property
+    def STOPWORDS(self) -> set[str]:
+        return _get_stopwords()
 
     # -----------------------------------------------------------------
     # Constructor
@@ -273,6 +290,7 @@ class LoadProductsFromFileUseCase:
     ) -> set[str]:
 
         keywords = set()
+        stopwords = _get_stopwords()
 
         # Parse keywords column (may be a string repr of a list, e.g. "['word1', 'word2']")
         kw_value = row.get("keywords")
@@ -295,7 +313,7 @@ class LoadProductsFromFileUseCase:
             if value and isinstance(value, str):
                 keywords.update(self.normalize(value))
 
-        return {kw for kw in keywords if kw and kw not in self.STOPWORDS}
+        return {kw for kw in keywords if kw and kw not in stopwords}
 
     def apply_numeric_extraction(
         self,

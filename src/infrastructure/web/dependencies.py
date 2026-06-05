@@ -20,7 +20,7 @@ from config.composition_root import (
 from infrastructure.persistence.postgresql.repositories.brand_repository_pg import (
     BrandRepositoryPG,
 )
-from infrastructure.embeddings.gemini.client import EmbeddingClient
+from infrastructure.embeddings.singleton import get_embedding_client
 
 from application.use_cases.classification.classify_product import ClassifyProductUseCase
 from application.use_cases.classification.classify_batch_products import ClassifyBatchProductsUseCase
@@ -33,10 +33,22 @@ from application.services.category_query_service import CategoryQueryService
 # Session
 # -----------------------------------------------------------------
 def get_session() -> Generator[Session, None, None]:
+    """
+    FastAPI dependency that yields a request-scoped SQLAlchemy session.
+
+    Always rolls back at the end of the request to guarantee the
+    next request gets a clean transaction (defends against the
+    "InFailedSqlTransaction" class of bugs where one statement
+    aborts the transaction and every subsequent one fails too).
+    """
     session = SessionLocal()
     try:
         yield session
     finally:
+        try:
+            session.rollback()
+        except Exception:
+            pass
         session.close()
 
 
@@ -50,7 +62,7 @@ def get_classify_product_use_case(session: Session) -> ClassifyProductUseCase:
         brands=BrandRepositoryPG(session),
         embeddings=create_embedding_repository(session),
         category_query_service=create_category_query_service(session),
-        service=EmbeddingClient(embedding_dim=768),
+        service=get_embedding_client(embedding_dim=768),
         uow=uow,
     )
 

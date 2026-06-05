@@ -8,8 +8,6 @@ __all__ = [
     "CategoryModel",
     "EmbeddingModel",
     "ProductModel",
-    "OutboxModel",
     "SqlAlchemyUnitOfWork",
-    "LLMClient",
     "EmbeddingClient",
 ]

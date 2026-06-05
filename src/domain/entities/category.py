@@ -55,27 +55,24 @@ class Category:
     @classmethod
     def create(cls, **data: Any) -> "Category":
 
-        try:
-            validated = validate_entity_fields(
-                cls,
-                data,
-                required_fields={"id", "name", "level"},
-                to_remove={"semantic_hash"},
+        validated = validate_entity_fields(
+            cls,
+            data,
+            required_fields={"id", "name", "level"},
+            to_remove={"semantic_hash"},
+        )
+
+        cls._validate(validated)
+
+        semantic_hash = SemanticHash.from_text(
+            cls._build_embedding_text(
+                name=validated["name"],
+                description=validated.get("description", ""),
+                keywords=validated.get("keywords", ()),
             )
+        ).value
 
-            cls._validate(validated)
-
-            semantic_hash = SemanticHash.from_text(
-                cls._build_embedding_text(
-                    name=validated["name"],
-                    description=validated.get("description", ""),
-                    keywords=validated.get("keywords", ()),
-                )
-            ).value
-
-            return cls(**validated, semantic_hash=semantic_hash)
-        except Exception as e:
-            return None
+        return cls(**validated, semantic_hash=semantic_hash)
 
     # ---------------------------------------------------------
     # Validation

@@ -12,6 +12,7 @@ from application.dto.classification.dto import (
     BatchClassificationResult,
     ClassifyBatchProductsCommand,
 )
+from config.settings import classification_settings
 
 from .embedding_pipeline import EmbeddingPipeline
 from .category_resolution import CategoryResolutionService
@@ -19,6 +20,7 @@ from .similarity_search import SimilaritySearchService
 from .enhancement_service import EnhancementService
 
 from domain.aggregates.product_classification_catalog import ProductClassification
+from utils.business import intersect_businesses
 
 
 logger = logging.getLogger(__name__)
@@ -26,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 class ClassifyBatchProductsUseCase:
 
-    MAX_PRODUCTS_PER_BATCH = 100
-    MAX_WORKERS = 4
+    MAX_PRODUCTS_PER_BATCH = classification_settings.max_products_per_batch
+    MAX_WORKERS = classification_settings.search_max_workers
 
     def __init__(
         self,
@@ -48,14 +50,15 @@ class ClassifyBatchProductsUseCase:
             embeddings_repository=embeddings,
             category_query_service=category_query_service,
             category_resolution_service=self._category_resolution_service,
-            max_workers=self.MAX_WORKERS,
+            max_workers=classification_settings.search_max_workers,
         )
 
         self._uow = uow
 
         self._embedding_pipeline = EmbeddingPipeline(
             embedding_service=embedding_service,
-            max_workers=self.MAX_WORKERS,
+            batch_size=classification_settings.embedding_batch_size,
+            max_workers=classification_settings.embedding_max_workers,
         )
 
         self._enhancement_service = EnhancementService()
@@ -77,6 +80,18 @@ class ClassifyBatchProductsUseCase:
             results = {}
             failed = {}
             context = ClassificationContext()
+
+            # Resolve thresholds once.
+            self._enhance_threshold = (
+                cmd.enhance_threshold
+                if cmd.enhance_threshold is not None
+                else classification_settings.enhance_threshold
+            )
+            self._min_confidence = (
+                cmd.min_confidence
+                if cmd.min_confidence is not None
+                else classification_settings.min_confidence
+            )
 
             cache_start = time.time()
             shared_path_cache = self._query_service.build_all_category_paths()
@@ -134,19 +149,61 @@ class ClassifyBatchProductsUseCase:
             )
             logger.info("Search phase: %.2fs", time.time() - search_start)
 
-            # Phase 5: Enhancement (optional)
-            if cmd.enhance:
-                enhance_start = time.time()
-                enhanced = self._enhancement_service.enhance(
-                    results=results,
-                    product_data=product_data,
-                )
+            # Phase 5: Enhancement (optional). Skip the LLM re-rank for
+            # products whose top1 cosine is above the configured
+            # threshold — the embedding match is already confident.
+            if cmd.enhance and self._enhance_threshold > 0.0:
+                to_enhance = {
+                    sku: businesses
+                    for sku, businesses in results.items()
+                    if any(
+                        biz_res is not None
+                        and biz_res.top_k
+                        and biz_res.top_k[0].score < self._enhance_threshold
+                        for biz_res in businesses.values()
+                    )
+                }
 
-                for sku, businesses in enhanced.items():
-                    results.setdefault(sku, {}).update(businesses)
+                if to_enhance:
+                    enhance_start = time.time()
+                    enhanced = self._enhancement_service.enhance(
+                        results=to_enhance,
+                        product_data=product_data,
+                    )
 
-                logger.info("Enhancement phase: %.2fs (%d enhanced)",
-                            time.time() - enhance_start, len(enhanced))
+                    for sku, businesses in enhanced.items():
+                        results.setdefault(sku, {}).update(businesses)
+
+                    logger.info(
+                        "Enhancement phase: %.2fs (%d/%d enhanced, threshold=%.2f)",
+                        time.time() - enhance_start,
+                        len(enhanced),
+                        len(results),
+                        self._enhance_threshold,
+                    )
+                else:
+                    logger.info(
+                        "Enhancement skipped: all %d products above threshold %.2f",
+                        len(results),
+                        self._enhance_threshold,
+                    )
+
+            # Phase 6: Reject results whose score < min_confidence
+            if self._min_confidence > 0.0:
+                rejected = 0
+                for sku, businesses in results.items():
+                    for business, classification in list(businesses.items()):
+                        if classification is None or not classification.top_k:
+                            continue
+                        if classification.top_k[0].score < self._min_confidence:
+                            businesses[business] = None
+                            rejected += 1
+                if rejected:
+                    logger.info(
+                        "Confidence phase: %d business results below min_confidence=%.2f (set to None)",
+                        rejected,
+                        self._min_confidence,
+                    )
 
             for sku in not_found:
                 failed[sku] = f"Product with SKU {sku} not found"
@@ -166,6 +223,7 @@ class ClassifyBatchProductsUseCase:
 
         except Exception as exc:
             logger.error("Error occurred during batch classification: %s", exc)
+            self._uow.rollback()
             return BatchClassificationResult(
                 results={},
                 failed={**{sku: str(exc) for sku in cmd.product_skus}},
@@ -217,22 +275,9 @@ class ClassifyBatchProductsUseCase:
 
     def _resolve_businesses(self, product, brands_cache):
 
-        product_businesses = set(product.business)
-
         brand = brands_cache.get(product.brand)
 
         if brand is None:
-            return product_businesses
+            return set(product.business)
 
-        normalized = set()
-
-        for business in brand.business:
-
-            if business.startswith("blp_"):
-                normalized.add(f"{business[4:]}-blp")
-            else:
-                normalized.add(business)
-
-        intersection = product_businesses & normalized
-
-        return intersection if intersection else product_businesses
+        return intersect_businesses(product.business, brand.business)

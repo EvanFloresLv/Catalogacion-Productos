@@ -1,6 +1,7 @@
 # -----------------------------------------------------------------
 # Standard Library
 # -----------------------------------------------------------------
+import logging
 from contextlib import asynccontextmanager
 
 # -----------------------------------------------------------------
@@ -12,13 +13,7 @@ import uvicorn
 # -----------------------------------------------------------------
 # Infrastructure
 # -----------------------------------------------------------------
-from infrastructure.persistence.postgresql.session import (
-    SessionLocal,
-)
-
-from infrastructure.persistence.postgresql.repositories.in_memory_embedding_repository import (
-    InMemoryEmbeddingRepository,
-)
+from infrastructure.embeddings.singleton import warmup_clients
 
 from infrastructure.web.routes import api_router
 
@@ -29,33 +24,35 @@ from config.logging_config import setup_logging
 
 setup_logging()
 
+logger = logging.getLogger(__name__)
+
 
 # -----------------------------------------------------------------
 # Application Lifespan
 # -----------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Pre-warm the embedding model + log the embedding table size."""
+    logger.info("Starting application…")
 
-    # Pre-warm the in-memory embedding cache at startup
-    session = SessionLocal()
     try:
-        InMemoryEmbeddingRepository(session)
-        print(f"Embedding cache loaded: {len(InMemoryEmbeddingRepository._entities)} vectors")
-    finally:
-        session.close()
-
-    print("Application startup completed")
+        warmup_clients(embedding_dim=768)
+        logger.info("Shared embedding client warmed up")
+    except Exception as e:
+        logger.warning(
+            "Failed to warm up embedding client (%s); first request will pay cold-start",
+            e,
+        )
 
     yield
 
-    print("Application shutdown completed")
+    logger.info("Application shutdown completed")
 
 
 # -----------------------------------------------------------------
 # FastAPI Factory
 # -----------------------------------------------------------------
 def create_app() -> FastAPI:
-
     app = FastAPI(
         title="Product Routing API",
         description="Product classification and category management API",
@@ -85,7 +82,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "src.infrastructure.web.app:app",
-        host="0.0.0.0",
-        port=8000,
+        host="127.0.0.1",
+        port=8080,
         reload=True,
     )

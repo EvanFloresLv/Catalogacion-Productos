@@ -17,6 +17,14 @@ class ClassifyProductRequest(BaseModel):
 class ClassifyBatchProductsRequest(BaseModel):
     product_skus: list[str] = Field(..., min_length=1, examples=[["1192296534", "1196142564"]])
     top_k: int = Field(default=5, ge=1, le=20)
+    enhance: bool = Field(default=True)
+    # Only re-rank with the LLM when the top1 cosine is below this.
+    # ``None`` falls back to ``CLASSIFY_ENHANCE_THRESHOLD`` (default 0.70).
+    enhance_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    # Reject a per-business result (return ``None``) when its final
+    # top1 cosine is below this. ``None`` falls back to
+    # ``CLASSIFY_MIN_CONFIDENCE`` (default 0.55). Set to 0.0 to disable.
+    min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 # -----------------------------------------------------------------

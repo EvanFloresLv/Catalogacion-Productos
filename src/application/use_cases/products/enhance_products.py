@@ -1,6 +1,8 @@
 # ---------------------------------------------------------------------
 # Standard library
 # ---------------------------------------------------------------------
+from __future__ import annotations
+
 import json
 import logging
 from typing import Any
@@ -13,14 +15,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 from llm_sdk.sync_sdk import LLM
-from llm_sdk.providers.sync_registry import ProviderSpec
-from llm_sdk_provider_gemini import SyncGeminiClient
-from llm_sdk.domain.chat import ChatMessage, ChatPart
 
 # ---------------------------------------------------------------------
 # Internal application imports
 # ---------------------------------------------------------------------
 from utils.prompt import Prompt
+from infrastructure.llm.sdk_factory import get_llm_sdk
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,23 +56,13 @@ class EnhanceProductsUseCase:
       4. Merge LLM results back into original data
     """
 
-    def __init__(self, model: str = "gemini-2.5-flash"):
+    def __init__(
+        self,
+        model: str = "gemini-2.5-flash",
+        sdk: LLM | None = None,
+    ):
         self._model = model
-        self._sdk = self._init_sdk()
-
-    # -----------------------------------------------------------------
-    # SDK Initialization
-    # -----------------------------------------------------------------
-    def _init_sdk(self) -> LLM:
-        sdk = LLM.default()
-        sdk.registry.register(ProviderSpec(
-            name="gemini",
-            factory=lambda: SyncGeminiClient(
-                location=sdk.settings.gemini.location,
-            ),
-            models={self._model},
-        ))
-        return sdk
+        self._sdk = sdk or get_llm_sdk()
 
     # -----------------------------------------------------------------
     # Public API
@@ -178,17 +168,9 @@ class EnhanceProductsUseCase:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 resp = self._sdk.chat(
-                    messages=[
-                        ChatMessage(
-                            role="model",
-                            parts=[ChatPart(type="text", text=system)],
-                        ),
-                        ChatMessage(
-                            role="user",
-                            parts=[ChatPart(type="text", text=user)],
-                        ),
-                    ],
+                    messages=[("model", system), ("user", user)],
                     output_schema=schema,
+                    output_mime_type="application/json",
                     provider="gemini",
                     model=self._model,
                 )

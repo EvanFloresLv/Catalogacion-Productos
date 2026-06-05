@@ -16,6 +16,19 @@ from application.use_cases.classification.enhance_classification import (
 logger = logging.getLogger(__name__)
 
 
+# Cap long descriptions to keep the LLM prompt small. 200 chars is
+# plenty for disambiguation and avoids a 2 KB marketing blurb.
+_MAX_DESC_CHARS = 200
+
+
+def _truncate(text: str | None, limit: int) -> str | None:
+    if not text:
+        return None
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
 class EnhancementService:
 
     def enhance(self, results: dict, product_data: dict) -> dict:
@@ -32,10 +45,15 @@ class EnhancementService:
 
         for item in response:
 
-            sku = item.get("product_sku")
-            business = item.get("business")
-
-            relevant_ids = item.get("relevant_categories", [])
+            # Accept both the compact keys (sku/biz/rel) and the old
+            # verbose keys (product_sku/business/relevant_categories).
+            sku = item.get("sku") or item.get("product_sku")
+            business = item.get("biz") or item.get("business")
+            relevant_ids = (
+                item.get("rel")
+                if item.get("rel") is not None
+                else item.get("relevant_categories", [])
+            )
 
             original = results.get(sku, {}).get(business)
 
@@ -97,25 +115,34 @@ class EnhancementService:
 
                 candidates = []
 
+                # For BLP businesses, strip the first path level (the
+                # brand) so the LLM sees only the catalog-side path.
                 for match in classification.top_k:
 
-                    path = (
-                        match.path
-                        if "blp" not in business
-                        else " > ".join(match.path.split(" > ")[1:])
-                    )
+                    if match.path is None:
+                        path = match.name or ""
+                    elif "blp" in business:
+                        path = " > ".join(match.path.split(" > ")[1:])
+                    else:
+                        path = match.path
 
-                    candidates.append({
-                        "id": match.category_id,
-                        "name": match.name,
-                        "path": path,
-                    })
+                    cand = {"id": match.category_id, "n": match.name, "p": path}
+                    if match.keywords:
+                        cand["k"] = list(match.keywords)
+                    candidates.append(cand)
 
-                payload.append({
-                    "product_sku": product.sku,
-                    "product_name": product.name,
-                    "business": business,
-                    "candidates": candidates,
-                })
+                item = {
+                    "sku": product.sku,
+                    "biz": business,
+                    "n": product.name,
+                    "b": product.brand,
+                    "g": product.gender,
+                    "t": sorted(product.article_group) if product.article_group else None,
+                    "desc": _truncate(product.description, _MAX_DESC_CHARS),
+                    "cands": candidates,
+                }
+
+                # Drop fields with no value to keep the prompt small.
+                payload.append({k: v for k, v in item.items() if v not in (None, "", [])})
 
         return payload

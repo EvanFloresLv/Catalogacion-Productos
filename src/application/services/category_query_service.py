@@ -80,8 +80,41 @@ class CategoryQueryService:
             limit=query.limit,
         )
 
+    def get_categories_by_cascade(
+        self,
+        *,
+        business: str,
+        brand: str | None = None,
+        gender: str | None = None,
+        article_group: list[str] | None = None,
+        is_leaf: bool = True,
+        per_strategy_limit: int | None = None,
+    ) -> list[tuple[int, Category]]:
+        return self._categories.get_categories_by_cascade(
+            business=business,
+            brand=brand,
+            gender=gender,
+            article_group=article_group,
+            is_leaf=is_leaf,
+            per_strategy_limit=per_strategy_limit,
+        )
+
 
     def build_category_path(self, category_id: str) -> str:
+        """
+        Resolve the full hierarchical path for a single category using
+        ONE recursive SQL query instead of walking parents one-by-one.
+        """
+        try:
+            paths = self._categories.get_category_paths_by_ids([category_id])
+        except Exception:
+            paths = {}
+        if paths:
+            return paths[category_id]
+        return self._build_category_path_legacy(category_id)
+
+    def _build_category_path_legacy(self, category_id: str) -> str:
+        """Fallback path builder used when the recursive query fails."""
         path_parts = []
         current_id: Optional[str] = category_id
         max_depth = 10
@@ -99,13 +132,21 @@ class CategoryQueryService:
 
 
     def build_all_category_paths(self) -> Dict[str, str]:
+        """
+        Compute the path for EVERY category in ONE recursive SQL query
+        (instead of walking the tree category-by-category in Python).
+        """
+        try:
+            return self._categories.get_all_category_paths()
+        except Exception:
+            return self._build_all_category_paths_legacy()
 
+    def _build_all_category_paths_legacy(self) -> Dict[str, str]:
         all_cats = self._categories.get_all() if hasattr(self._categories, "get_all") else []
         cat_map = {c.id: c for c in all_cats}
         paths = {}
 
         for cat in all_cats:
-
             if cat.id in paths:
                 continue
 

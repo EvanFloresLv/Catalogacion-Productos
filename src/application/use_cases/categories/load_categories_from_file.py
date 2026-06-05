@@ -215,27 +215,33 @@ class LoadCategoriesFromFileUseCase:
                 except json.JSONDecodeError:
                     palabras = [palabras]
 
-            category = Category.create(
-                id=cat_id,
-                name=name,
-                level=level,
+            try:
+                category = Category.create(
+                    id=cat_id,
+                    name=name,
+                    level=level,
 
-                parent_id=parent_id,
-                is_leaf=False,  # Will be resolved after all categories are built
+                    parent_id=parent_id,
+                    is_leaf=False,  # Will be resolved after all categories are built
 
-                description=descripcion,
-                gender=row_dict.get(gend_key, None),
-                direction=None,
-                brand=brand,
-                article_group=group_articles,
-                business=business,
+                    description=descripcion,
+                    gender=row_dict.get(gend_key, None),
+                    direction=None,
+                    brand=brand,
+                    article_group=group_articles,
+                    business=business,
 
-                keywords=self._extract_keywords(
-                    titulo, descripcion, palabras
+                    keywords=self._extract_keywords(
+                        titulo, descripcion, palabras
+                    )
                 )
-            )
-
-            if not category:
+            except Exception as exc:
+                logger.warning(
+                    "Skipping category id=%s name=%s due to validation error: %s",
+                    cat_id,
+                    name,
+                    exc,
+                )
                 continue
 
             # Deduplicate in O(1)
@@ -247,20 +253,28 @@ class LoadCategoriesFromFileUseCase:
         for cat in seen.values():
             if cat.id not in parent_ids:
                 # Recreate with is_leaf=True
-                cat = Category.create(
-                    id=cat.id,
-                    name=cat.name,
-                    level=cat.level,
-                    parent_id=cat.parent_id,
-                    is_leaf=True,
-                    description=cat.description,
-                    gender=cat.gender,
-                    direction=cat.direction,
-                    brand=cat.brand,
-                    article_group=cat.article_group,
-                    business=cat.business,
-                    keywords=cat.keywords,
-                )
+                try:
+                    cat = Category.create(
+                        id=cat.id,
+                        name=cat.name,
+                        level=cat.level,
+                        parent_id=cat.parent_id,
+                        is_leaf=True,
+                        description=cat.description,
+                        gender=cat.gender,
+                        direction=cat.direction,
+                        brand=cat.brand,
+                        article_group=cat.article_group,
+                        business=cat.business,
+                        keywords=cat.keywords,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to set is_leaf on category %s: %s",
+                        cat.id,
+                        exc,
+                    )
+                    continue
             result.append(cat)
 
         return result

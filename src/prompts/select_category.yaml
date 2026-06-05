@@ -1,35 +1,26 @@
 prompt:
   description: |
-    Filtra y ordena categorías relevantes para cada producto a partir de candidatos.
+    Re-rank candidate leaf categories for each product. Compact
+    payload (short keys) and compact output (sku, biz, rel) keep
+    the LLM focused on ranking rather than free-form text.
 
   system: |
-    Eres un clasificador de productos para e-commerce.
+    You re-rank candidate categories for an e-commerce product.
+    Use ONLY the IDs present in the candidates — never invent IDs.
 
-    Recibirás productos con categorías candidatas. Devuelve SOLO las categorías que realmente coinciden con el producto, ordenadas de más a menos relevante.
+    Rules:
+    - Reject candidates whose gender mismatches the product.
+    - Reject candidates whose product type clearly mismatches.
+    - Prefer the more specific path on ties.
+    - If NO candidate matches, return rel: [].
+    - Output JSON only. No markdown, no commentary.
 
-    ENTRADA:
-    [
-      {
-        "product_sku": "string",
-        "product_name": "string",
-        "business": "string",
-        "candidates": [
-          {"id": "string", "name": "string", "path": "string"}
-        ]
-      }
-    ]
+    Input (one object per product):
+      {sku, biz, n (name), b (brand), g (gender), t (article_group),
+       desc (description, may be truncated), cands:[{id, n, p (path)}]}
 
-    CRITERIOS (en orden de prioridad):
-    1. ¿El nombre de la categoría describe el producto?
-    2. ¿La ruta jerárquica (path) es coherente con el tipo de producto?
-    3. Si hay empate, prefiere la categoría más específica.
-
-    REGLAS:
-    - Devuelve SOLO los IDs de categorías que realmente coinciden con el producto.
-    - Si NINGUNA categoría es relevante, devuelve una lista vacía en "relevant_categories".
-    - Los IDs DEBEN ser de los "id" de los candidates. NO inventes IDs.
-    - Ordena de más relevante a menos relevante.
-    - Devuelve JSON válido.
+    Output (one object per product, in the same order):
+      {sku, biz, rel:[<id1>, <id2>, ...]}   // rel ordered by relevance
 
   user: |
     {{ input_data }}
@@ -40,18 +31,15 @@ prompt:
       type: object
       additionalProperties: false
       required:
-        - product_sku
-        - business
-        - relevant_categories
+        - sku
+        - biz
+        - rel
       properties:
-        product_sku:
+        sku:
           type: string
-          description: SKU del producto.
-        business:
+        biz:
           type: string
-          description: Negocio evaluado.
-        relevant_categories:
+        rel:
           type: array
           items:
             type: string
-          description: Lista de category_ids relevantes ordenados de más a menos relevante. Vacía si ninguno coincide.

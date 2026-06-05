@@ -17,13 +17,12 @@ class UnitOfWork(ABC):
       - Track modified aggregates
       - On commit:
           1. Pull events from every tracked aggregate
-          2. Persist events via OutboxWriter
+          2. Dispatch events to in-process handlers
           3. Commit the DB transaction
       - On rollback: discard all changes
 
     Rules:
       - All write operations MUST go through UoW
-      - Events MUST NOT be persisted outside UoW
     """
 
     def __init__(self) -> None:
@@ -44,7 +43,7 @@ class UnitOfWork(ABC):
     def commit(self) -> None:
         """
         1. Pull events from tracked aggregates
-        2. Persist events to outbox
+        2. Dispatch events to handlers
         3. Commit the database transaction
         """
         raise NotImplementedError

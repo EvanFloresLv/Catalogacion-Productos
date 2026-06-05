@@ -23,7 +23,7 @@ class EventBusHandler(EventHandler):
       bus = InProcessEventBus()
       wire_projections(bus, session_factory)
       handler = EventBusHandler(bus)
-      uow = SqlAlchemyUnitOfWork(session, outbox, [handler])
+      uow = SqlAlchemyUnitOfWork(session, [handler])
     """
 
     def __init__(self, bus: EventBus) -> None:

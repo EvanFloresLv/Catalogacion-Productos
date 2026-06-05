@@ -107,8 +107,15 @@ def classify_product(
     if not results:
         raise HTTPException(status_code=404, detail=f"No results for SKU {body.product_sku}")
 
-    product = ProductRepositoryPG(session).get_by_sku(body.product_sku)
-    product_name = product.name if product else ""
+    # Defensive: ensure the follow-up product lookup runs on a
+    # clean transaction (see classify_batch for the same reason).
+    product_name = ""
+    try:
+        session.rollback()
+        product = ProductRepositoryPG(session).get_by_sku(body.product_sku)
+        product_name = product.name if product else ""
+    except Exception:
+        product_name = ""
 
     return ClassifyProductResponse(
         results={
@@ -130,13 +137,27 @@ def classify_batch(
     cmd = ClassifyBatchProductsCommand(
         product_skus=tuple(body.product_skus),
         top_k=body.top_k,
+        enhance=body.enhance,
+        enhance_threshold=body.enhance_threshold,
+        min_confidence=body.min_confidence,
     )
     batch = use_case.execute(cmd)
 
-    # Fetch product names for all SKUs
-    product_repo = ProductRepositoryPG(session)
-    products = product_repo.get_by_skus(list(body.product_skus))
-    name_map = {p.sku: p.name for p in products}
+    # Fetch product names for all SKUs. If the use case's pipeline
+    # aborted the session (e.g. a transient DB error during
+    # similarity search), the follow-up read would otherwise see
+    # "current transaction is aborted". Roll back first so this
+    # lookup always runs on a clean transaction.
+    name_map: dict[str, str] = {}
+    try:
+        session.rollback()
+        product_repo = ProductRepositoryPG(session)
+        products = product_repo.get_by_skus(list(body.product_skus))
+        name_map = {p.sku: p.name for p in products}
+    except Exception:
+        # Best-effort: the classification result is still useful
+        # without product names.
+        name_map = {}
 
     return BatchClassificationResponse(
         results={
