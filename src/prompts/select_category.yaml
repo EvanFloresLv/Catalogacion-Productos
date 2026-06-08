@@ -11,6 +11,9 @@ prompt:
     Rules:
     - Reject candidates whose gender mismatches the product.
     - Reject candidates whose product type clearly mismatches.
+    - Reject candidates whose keywords clearly mismatch the product description.
+    - Reject candidates whose path is semantically too different from the product name.
+    - Remove candidates with low confidence scores.
     - Prefer the more specific path on ties.
     - If NO candidate matches, return rel: [].
     - Output JSON only. No markdown, no commentary.
